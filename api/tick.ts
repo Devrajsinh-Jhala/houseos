@@ -1,8 +1,8 @@
 import { Redis } from "@upstash/redis";
 import webpush from "web-push";
 // Type-only, so TypeScript erases it and nothing has to resolve at runtime.
-// See the note at the top of subscribe.ts about why these files don't share
-// a runtime module.
+// See the note at the top of subscribe.ts about why these files share no
+// runtime module, and why this is a named export rather than a default one.
 import type { StoredDevice } from "./subscribe";
 
 // Runs every 15 minutes. On Vercel Pro that's a cron in vercel.json; on the free
@@ -22,10 +22,15 @@ export const config = { runtime: "nodejs" };
 
 let client: Redis | null = null;
 
-/** Lazy, so a deployment with no Upstash store fails readably instead of on import. */
-function store(): Redis {
-  if (!client) client = Redis.fromEnv();
-  return client;
+/** Lazy, so a deployment with no Upstash store answers readably instead of dying on import. */
+function store(): Redis | null {
+  if (client) return client;
+  try {
+    client = Redis.fromEnv();
+    return client;
+  } catch {
+    return null;
+  }
 }
 
 function minutesNowIn(timezone: string): { minutes: number; weekday: number } {
@@ -54,7 +59,7 @@ function dueNow(device: StoredDevice) {
     ({ minutes, weekday } = minutesNowIn(device.timezone));
   } catch {
     // A bad IANA name from a spoofed client would otherwise take down the
-    // whole cron run and everyone else's reminders with it.
+    // whole run and everyone else's reminders with it.
     ({ minutes, weekday } = minutesNowIn("UTC"));
   }
   const weekend = weekday === 0 || weekday === 6;
@@ -68,28 +73,27 @@ function dueNow(device: StoredDevice) {
   });
 }
 
-export default async function handler(): Promise<Response> {
+export async function GET(): Promise<Response> {
   const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
     // 503, not 500: running HouseOS with reminders off is a supported choice,
     // and the scheduler pinging this should not report it as a fault.
     return Response.json({ error: "No VAPID keys — reminders are off." }, { status: 503 });
   }
-  webpush.setVapidDetails(
-    VAPID_SUBJECT || "mailto:you@example.com",
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
 
-  let redis: Redis;
-  try {
-    redis = store();
-  } catch {
+  const redis = store();
+  if (!redis) {
     return Response.json(
       { error: "No Redis store configured — reminders are off for this deployment." },
       { status: 503 }
     );
   }
+
+  webpush.setVapidDetails(
+    VAPID_SUBJECT || "mailto:you@example.com",
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+  );
 
   const devices = (await redis.hgetall<Record<string, StoredDevice>>(DEVICES)) ?? {};
   const staleBefore = Date.now() - STALE_DAYS * 86_400_000;

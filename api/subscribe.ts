@@ -1,18 +1,19 @@
 import { createHash } from "node:crypto";
 import { Redis } from "@upstash/redis";
 
-// Self-contained on purpose. Each file under api/ is built as its own function,
-// and a shared runtime module between them is fragile here: an underscore-
-// prefixed helper is excluded from the build outright, and a plain relative
-// import needs a file extension once it runs as ESM on Node. The only thing
-// tick.ts borrows from this file is the StoredDevice *type*, which TypeScript
-// erases at compile time and so never has to resolve at runtime.
+// Named method exports, not `export default`. Vercel's Node runtime reads a
+// default export as the `(req, res) => void` signature and *ignores* whatever
+// it returns — so a handler that returns a Response never writes anything and
+// the request hangs until it times out. GET/POST/DELETE exports get the
+// Web-standard Request -> Response signature this file is written against.
+//
+// Self-contained on purpose too: each file under api/ is built as its own
+// function, an underscore-prefixed helper is excluded from the build outright,
+// and a plain relative import needs a file extension once it runs as ESM.
+// tick.ts borrows only the StoredDevice *type*, which TypeScript erases.
 //
 // The upshot: DEVICES below is duplicated in tick.ts. Change one, change both.
 
-// One field per device, keyed by a hash of its push endpoint. The first cut of
-// this used a single key for one device, which meant the second person to
-// install the app silently evicted the first.
 export const DEVICES = "houseos:devices";
 
 export interface StoredDevice {
@@ -35,9 +36,21 @@ let client: Redis | null = null;
  * store returns an opaque crash instead of a readable error. Push is optional
  * in this app; skipping it should not look like a broken deploy.
  */
-function store(): Redis {
-  if (!client) client = Redis.fromEnv();
-  return client;
+function store(): Redis | null {
+  if (client) return client;
+  try {
+    client = Redis.fromEnv();
+    return client;
+  } catch {
+    return null;
+  }
+}
+
+function notConfigured(): Response {
+  return Response.json(
+    { error: "No Redis store configured — reminders are off for this deployment." },
+    { status: 503 }
+  );
 }
 
 export const config = { runtime: "nodejs" };
@@ -45,25 +58,9 @@ export const config = { runtime: "nodejs" };
 /** A phone with a hundred routine anchors is a bug, not a household. */
 const MAX_ANCHORS = 100;
 
-export default async function handler(req: Request): Promise<Response> {
-  let redis: Redis;
-  try {
-    redis = store();
-  } catch {
-    return Response.json(
-      { error: "No Redis store configured — reminders are off for this deployment." },
-      { status: 503 }
-    );
-  }
-
-  if (req.method === "DELETE") {
-    const { endpoint } = (await req.json().catch(() => ({}))) as { endpoint?: string };
-    if (!endpoint) return new Response("Missing endpoint", { status: 400 });
-    await redis.hdel(DEVICES, deviceId(endpoint));
-    return Response.json({ ok: true });
-  }
-
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+export async function POST(req: Request): Promise<Response> {
+  const redis = store();
+  if (!redis) return notConfigured();
 
   const body = (await req.json().catch(() => ({}))) as Partial<StoredDevice>;
   const endpoint = body.subscription?.endpoint;
@@ -84,4 +81,14 @@ export default async function handler(req: Request): Promise<Response> {
 
   await redis.hset(DEVICES, { [deviceId(endpoint)]: device });
   return Response.json({ ok: true, anchors: device.schedule.length });
+}
+
+export async function DELETE(req: Request): Promise<Response> {
+  const redis = store();
+  if (!redis) return notConfigured();
+
+  const { endpoint } = (await req.json().catch(() => ({}))) as { endpoint?: string };
+  if (!endpoint) return new Response("Missing endpoint", { status: 400 });
+  await redis.hdel(DEVICES, deviceId(endpoint));
+  return Response.json({ ok: true });
 }
