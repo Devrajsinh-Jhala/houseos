@@ -31,10 +31,10 @@ function deviceId(endpoint: string): string {
 let client: Redis | null = null;
 
 /**
- * Lazy. `Redis.fromEnv()` throws when the Upstash variables are missing, and at
- * module scope that throw happens on import — so a deployment without a Redis
- * store returns an opaque crash instead of a readable error. Push is optional
- * in this app; skipping it should not look like a broken deploy.
+ * Lazy, and null when there is nothing to connect to. Building the client at
+ * module scope meant a deployment without a Redis store crashed on import
+ * rather than answering. Push is optional in this app; skipping it should not
+ * look like a broken deploy.
  */
 function store(): Redis | null {
   if (client) return client;
