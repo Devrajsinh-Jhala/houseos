@@ -1,8 +1,5 @@
-import { Redis } from "@upstash/redis";
 import webpush from "web-push";
-import { DEVICES, type StoredDevice } from "./subscribe";
-
-const redis = Redis.fromEnv();
+import { DEVICES, notConfigured, store, type StoredDevice } from "./_store";
 
 // Runs every 15 minutes (see vercel.json). Web push has no client-side
 // scheduling on iOS, so the moment-of-event send happens here.
@@ -64,6 +61,13 @@ export default async function handler(): Promise<Response> {
     VAPID_PUBLIC_KEY,
     VAPID_PRIVATE_KEY
   );
+
+  let redis;
+  try {
+    redis = store();
+  } catch {
+    return notConfigured();
+  }
 
   const devices = (await redis.hgetall<Record<string, StoredDevice>>(DEVICES)) ?? {};
   const staleBefore = Date.now() - STALE_DAYS * 86_400_000;

@@ -1,24 +1,6 @@
-import { createHash } from "node:crypto";
-import { Redis } from "@upstash/redis";
+import { DEVICES, deviceId, notConfigured, store, type StoredDevice } from "./_store";
 
-const redis = Redis.fromEnv();
-
-// One field per device, keyed by a hash of its push endpoint. The first cut of
-// this used a single key for one device, which meant the second person to
-// install the app silently evicted the first.
-export const DEVICES = "houseos:devices";
-
-export interface StoredDevice {
-  subscription: { endpoint: string; keys?: Record<string, string> };
-  timezone: string;
-  /** Routine anchors mirrored from the phone, so the cron knows when to fire. */
-  schedule: { name: string; time: string; dayScope: "any" | "weekday" | "weekend" }[];
-  updatedAt: string;
-}
-
-export function deviceId(endpoint: string): string {
-  return createHash("sha256").update(endpoint).digest("hex").slice(0, 24);
-}
+export type { StoredDevice };
 
 export const config = { runtime: "nodejs" };
 
@@ -26,6 +8,13 @@ export const config = { runtime: "nodejs" };
 const MAX_ANCHORS = 100;
 
 export default async function handler(req: Request): Promise<Response> {
+  let redis;
+  try {
+    redis = store();
+  } catch {
+    return notConfigured();
+  }
+
   if (req.method === "DELETE") {
     const { endpoint } = (await req.json().catch(() => ({}))) as { endpoint?: string };
     if (!endpoint) return new Response("Missing endpoint", { status: 400 });
