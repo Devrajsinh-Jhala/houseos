@@ -1,12 +1,13 @@
 # HouseOS
 
-Running the house, one tick at a time. A private, local-first PWA for the
-domestic admin nobody schedules — the atta, the gas cylinder, the rent, the
-bathroom you last cleaned at some point.
+Running the house, one tick at a time. A small offline PWA for the domestic
+admin nobody schedules — the atta, the gas cylinder, the rent, the bathroom you
+last cleaned at some point.
 
-No accounts. No sign-up. No server for the core app. Everything lives in
-IndexedDB on your own device, and the only backend is an optional push sender
-you can skip entirely.
+**No server. No accounts. No API keys. Nothing to configure.** It is a static
+page and an IndexedDB database on your own phone. Open it, add it to your Home
+Screen, use it. Nothing is ever sent anywhere, because there is nowhere to send
+it to.
 
 **The idea it's built around:** every reminder app makes you guess how often you
 do something, then nags you on your own bad guess forever. HouseOS watches when
@@ -49,109 +50,72 @@ you decide if that's your house.
 **"Not set up yet."** A freshly seeded item has never been ticked, so the app
 genuinely doesn't know when you last did it — that isn't the same as overdue.
 Those sit in their own section at the bottom until you say when, with a "set all
-to today" if you just want to start the clock. Your main list stays real.
+to today" if you just want to start the clock.
 
 **Snoozing.** Shop was shut, didn't get to it. Marking it done would be a lie
 that poisons the learned interval, so instead push it out two days or a week.
 `lastDone` is untouched.
 
+## Reminders, without a server
+
+The web cannot wake a closed app at a given time on its own. Every route to that
+runs through a push service, which means a server, a key pair and an account —
+and having none of those is the point of this app.
+
+So HouseOS doesn't imitate an alarm clock badly. It hands your routine and fixed
+dates to the calendar app already on your phone, which does alerts properly,
+natively and offline. **Manage → Download calendar file** gives you a standard
+`.ics`; open it and your phone offers to add the events, with an alert on each.
+
+- Daily, weekday-only and weekend-only routines become the matching repeat rule.
+- Fixed dates repeat monthly. Rent on the 31st lands on the 28th in February,
+  the same way the Dates screen clamps it.
+- Chores and restocking are deliberately left out. Their due dates move every
+  time you tick one off, and a repeating calendar event cannot follow that — it
+  would drift away from the truth within a fortnight.
+
+The file is a copy, not a link, so re-export after you change your routine times.
+
 ## Dark mode
 
-Follows your system by default, with an explicit **System / Light / Dark**
-toggle on Manage for when the two disagree. The choice is remembered per device
-and applied before first paint, so there's no white flash on the way into dark.
-
-Every colour in the app was already a design token, so the dark palette is a
-redefinition of those tokens and nothing else.
+Follows your system by default, with an explicit **System / Light / Dark** toggle
+on Manage for when the two disagree. The choice is remembered per device and
+applied before first paint, so there's no white flash on the way into dark.
 
 ## Run it locally
 
 ```bash
 npm install
 npm run dev     # http://localhost:5173
-npm test        # the core logic — day boundary, due dates, the median
+npm test        # the core logic and the calendar format
 ```
+
+Three runtime dependencies: `react`, `react-dom` and `idb`. None of them phone
+home or want a key.
 
 First launch seeds ~70 items with Indian-context defaults. Correct them on the
 Manage screen as you learn yours, or delete the lot and start empty.
 
-## Deploy your own
+## Deploy it
+
+`npm run build` produces a `dist/` folder of static files. That is the whole
+deployment — put it anywhere:
 
 ```bash
-npm i -g vercel
-vercel
+npx vercel          # or netlify, or Cloudflare Pages, or any static host
 ```
 
-Vite builds to `dist/`; `vercel.json` is already set up. It works fine with no
-backend at all — you just don't get push.
+For GitHub Pages, set `base: "/houseos/"` in `vite.config.ts` first, so the
+asset paths match the subdirectory.
 
-**On the free tier, the reminder schedule lives in GitHub Actions, not Vercel.**
-Vercel's Hobby plan allows one cron run per day, which is useless to an app whose
-job is "tell me at 06:45", so `.github/workflows/tick.yml` pings `/api/tick`
-every 15 minutes instead. Set a repository variable `TICK_URL` to
-`https://your-app.vercel.app/api/tick` and it starts working. On Pro, delete that
-workflow and put the cron back in `vercel.json`:
+There is nothing to configure afterwards. No environment variables, no database,
+no cron, no dashboard.
 
-```json
-"crons": [{ "path": "/api/tick", "schedule": "*/15 * * * *" }]
-```
+## Install on your phone
 
-GitHub's scheduled runs are best-effort and can land a few minutes late, so a
-badly delayed run can miss an anchor. It is a free cron, priced accordingly.
-
-## Install on iPhone
-
-Open the deployed URL in **Safari** (not Chrome), tap Share, then Add to Home
-Screen, then open it from the icon. This step is not optional if you want
-reminders — see below.
-
-## Reminders
-
-There is no scheduled local notification API on the web. Apple's guidance is to
-send a Web Push at the moment of the event, which is why timing lives on the
-server rather than on the phone.
-
-Three constraints follow from that:
-
-- Push only works for web apps installed to the Home Screen. A Safari tab
-  cannot receive push even after you grant permission.
-- The permission prompt must be triggered by a tap, so it lives behind the
-  button on the Manage screen and never fires on load.
-- The server needs its own copy of your routine times, since it can't read
-  IndexedDB. Subscribing uploads them — and **editing a routine re-uploads them
-  automatically**, so there's nothing to remember.
-
-If you'd rather skip all of this: leave push off and use iOS Alarms for the
-wake-up time. The app still works as a pull-based tool you open when you're
-home. Nothing else depends on push.
-
-### Setting it up
-
-Generate a key pair:
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-Then set these in Vercel:
-
-| variable                     | where            |
-|------------------------------|------------------|
-| `VITE_VAPID_PUBLIC_KEY`      | build + runtime  |
-| `VAPID_PUBLIC_KEY`           | runtime          |
-| `VAPID_PRIVATE_KEY`          | runtime          |
-| `VAPID_SUBJECT`              | `mailto:you@...` |
-| `UPSTASH_REDIS_REST_URL`     | runtime          |
-| `UPSTASH_REDIS_REST_TOKEN`   | runtime          |
-
-Add a Redis store from the Vercel Marketplace — Vercel KV is deprecated and
-existing stores were migrated to Upstash, so new projects go straight there.
-Adding the integration sets the two Upstash variables for you.
-
-Redeploy, open the app from the Home Screen icon, and tap **Turn on
-reminders** on Manage. Devices are stored one row per push endpoint, so a
-deployment can serve a household — or a handful of strangers — without them
-treading on each other. Dead subscriptions are pruned on the next cron run.
+Open the URL in **Safari** on iPhone or Chrome on Android, then Share → Add to
+Home Screen. It opens full-screen from the icon and works with no signal —
+useful in a shop basement, which is exactly where you need the list.
 
 ## Backup
 
@@ -169,22 +133,16 @@ skipped rather than being written straight into your database.
 src/
   core.ts        model, due dates, pressure, day boundary, interval
                  learning — no React, fully unit-tested
-  core.test.ts   the day boundary, month clamping, the median
+  calendar.ts    the .ics builder — no dependencies, just string work
   db.ts          IndexedDB, completion log, export/import
-  seed.ts        the ~70 starting items
-  push.ts        subscription, with the iOS standalone guard
   theme.ts       system/light/dark, applied before first paint
+  seed.ts        the ~70 starting items
   App.tsx        tabs and state
   components/    Row, ItemSheet, SetupSection
   views/         Today, Shopping, Chores, Dates, Manage
 public/
-  sw.js          hand-written: offline shell + push handlers
+  sw.js          hand-written: the offline shell, and nothing else
   manifest.webmanifest
-api/
-  subscribe.ts   stores one device per endpoint + its routine anchors
-  tick.ts        cron, sends what's due in the next 15 minutes
-.github/
-  workflows/tick.yml   the free-tier scheduler
 ```
 
 `NOTES.md` has the design tokens and the reasoning behind them.
@@ -195,8 +153,9 @@ No quantity inventory, no meal planning, no budgets, no chatbot, no how-to
 guides. The phone already has an LLM for "how do I pick good bhindi", and every
 one of those features is a reason to stop finishing this one.
 
-No accounts and no sync either. The moment there's a server holding your data,
-this stops being a thing you can trust without reading the privacy policy.
+No accounts, no sync, no server. The moment there is a backend holding your
+data, this stops being a thing you can trust without reading a privacy policy —
+and it stops being a thing you can deploy in one command and then forget about.
 
 ## Licence
 

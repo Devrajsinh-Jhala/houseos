@@ -90,13 +90,21 @@ export function needsSetup(item: Item): boolean {
   return !item.lastDone;
 }
 
-function daysInMonth(year: number, monthIndex: number): number {
+export function daysInMonth(year: number, monthIndex: number): number {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
 
-/** Day-of-month for `fixed`, pulled back to the last day of a short month. */
+/**
+ * Day-of-month for `fixed`, pulled back to the last day of a short month, so
+ * rent on the 31st lands on the 28th in February. Exported because the calendar
+ * export has to reproduce exactly this rule.
+ */
+export function clampMonthDay(monthDay: number | undefined, year: number, monthIndex: number) {
+  return Math.min(Math.max(monthDay ?? 1, 1), daysInMonth(year, monthIndex));
+}
+
 function anchoredDay(item: Item, year: number, monthIndex: number): number {
-  return Math.min(Math.max(item.monthDay ?? 1, 1), daysInMonth(year, monthIndex));
+  return clampMonthDay(item.monthDay, year, monthIndex);
 }
 
 function rawDueDate(item: Item, now: Date): Date {

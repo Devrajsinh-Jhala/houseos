@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { exportBackup, getMeta, importBackup, setMeta } from "../db";
 import { DAY_MS, fmtClock, type Item, type Kind } from "../core";
-import { disablePush, enablePush, isSubscribed, pushSupport } from "../push";
+import { buildCalendar } from "../calendar";
 import { applyTheme, storedTheme, type Theme } from "../theme";
 
 const KINDS: { key: Kind; label: string }[] = [
@@ -21,6 +21,15 @@ const BACKUP_KEY = "lastBackupAt";
 /** Long enough not to nag, short enough that a wipe costs you weeks not months. */
 const NAG_AFTER_DAYS = 30;
 
+function download(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 interface Props {
   items: Item[];
   onEdit: (item: Item) => void;
@@ -34,14 +43,10 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
   const [query, setQuery] = useState("");
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(storedTheme);
-  const [support] = useState(pushSupport);
-  // null until the subscription has actually been looked up.
-  const [remindersOn, setRemindersOn] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void getMeta<string>(BACKUP_KEY).then((v) => setLastBackup(v ?? null));
-    void isSubscribed().then(setRemindersOn);
   }, []);
 
   const q = query.trim().toLowerCase();
@@ -67,16 +72,23 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
 
   const doExport = async () => {
     const data = await exportBackup();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `houseos-${data.exportedAt.slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    download(
+      new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      `houseos-${data.exportedAt.slice(0, 10)}.json`
+    );
     await setMeta(BACKUP_KEY, data.exportedAt);
     setLastBackup(data.exportedAt);
     toast("Backup saved");
+  };
+
+  const doCalendar = () => {
+    const { ics, count } = buildCalendar(items);
+    if (!count) {
+      toast("No routine or fixed dates to export");
+      return;
+    }
+    download(new Blob([ics], { type: "text/calendar" }), "houseos-routine.ics");
+    toast(`${count} events exported`);
   };
 
   const doImport = async (file: File) => {
@@ -214,67 +226,23 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
       <div className="section">
         <h2>Reminders</h2>
       </div>
-      {support === "unsupported" ? (
-        <p className="note">
-          This browser can't do push. On iPhone, open the site in Safari, tap
-          Share, then Add to Home Screen, and open it from the icon — push only
-          works for installed web apps.
-        </p>
-      ) : support === "unconfigured" ? (
-        <p className="note">
-          This copy of HouseOS was deployed without a VAPID key, so reminders are
-          off. Everything else works — the readme has the three commands if you
-          want to turn them on.
-        </p>
-      ) : remindersOn === null ? (
-        <p className="note">Checking…</p>
-      ) : remindersOn ? (
-        <>
-          <p className="note">
-            Reminders are on for this device. Your routine times are re-sent
-            automatically whenever you edit one.
-          </p>
-          <div className="btn-row">
-            <button
-              className="btn ghost"
-              onClick={async () => {
-                try {
-                  await disablePush();
-                  setRemindersOn(await isSubscribed());
-                  toast("Reminders off");
-                } catch {
-                  toast("Could not turn them off");
-                }
-              }}
-            >
-              Turn off reminders
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="note">
-            Web push has no scheduling on the phone itself, so the server sends
-            each reminder at the moment it's due.
-          </p>
-          <div className="btn-row">
-            <button
-              className="btn ghost"
-              onClick={async () => {
-                try {
-                  await enablePush();
-                  setRemindersOn(await isSubscribed());
-                  toast("Reminders on");
-                } catch (err) {
-                  toast(err instanceof Error ? err.message : "Could not enable");
-                }
-              }}
-            >
-              Turn on reminders
-            </button>
-          </div>
-        </>
-      )}
+      <p className="note">
+        HouseOS has no server and no account, so it can't send you a
+        notification by itself — there is nowhere for one to be sent from. What
+        it can do is hand your routine and fixed dates to the calendar app on
+        your phone, which already does alerts properly, offline and for free.
+      </p>
+      <div className="btn-row">
+        <button className="btn ghost" onClick={doCalendar}>
+          Download calendar file
+        </button>
+      </div>
+      <p className="hint">
+        Open the file on your phone and it offers to add the events. Re-export
+        after you change your routine times — the file is a copy, not a link.
+        Chores and restocking stay out of it on purpose: their dates move every
+        time you tick one off, and a repeating calendar event can't follow that.
+      </p>
     </>
   );
 }

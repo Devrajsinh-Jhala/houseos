@@ -47,10 +47,7 @@ LLM on the phone already answers "how do I pick good bhindi".
 
 ## iOS constraints that shaped this
 - Scheduled local notifications do not exist in the web Notifications API.
-  Apple's answer is to send a Web Push at the moment of the event.
-- Web Push on iOS only works when installed via Share > Add to Home Screen.
-  A Safari tab cannot receive push even with permission granted.
-- The permission prompt must be triggered by a direct tap, never on load.
+  Apple's answer is Web Push at the moment of the event — which needs a server.
 - No Background Sync API. No install prompt event.
 - Storage for installed web apps is reasonably durable but not guaranteed,
   so JSON export exists and matters.
@@ -102,3 +99,42 @@ and anything that hasn't re-subscribed in 180 days aged out.
 rollover, anchors wrapping past midnight, month-end clamping for `fixed`, the
 median. It now has 26 tests. Rent on the 31st lands on the 28th in February, and
 there is a test that says so.
+
+## The backend, and its removal
+
+The first version answered the notification problem the way the platform tells
+you to: a Vercel function, a Redis store for the subscriptions, VAPID keys, and
+a cron firing a Web Push at the moment of each event. It worked in principle,
+and it was the wrong shape for this app.
+
+The cost was not code. It was that "a private tool you install and forget"
+became "sign up for two services, generate a key pair, set six environment
+variables, and hope the free cron tier holds". Vercel's Hobby plan allows one
+cron run per day, so the schedule had to move to GitHub Actions to work at all.
+Every one of those is a thing that can break silently in six months, on an app
+whose entire promise is that it just sits there and works.
+
+So it is gone. No `api/`, no keys, no accounts, three runtime dependencies, and
+`dist/` is the whole deployment.
+
+### What replaced it
+Not an imitation of push — there isn't an honest one. The web cannot wake a
+closed page on a timer without a push service, and pretending otherwise with
+service-worker timeouts would produce reminders that fire sometimes.
+
+Instead, `calendar.ts` writes an RFC 5545 file and hands the schedule to the
+calendar app already on the phone, which has a real alerting system, works
+offline, and needs no account. Routines become DAILY or WEEKLY;BYDAY rules;
+fixed dates become MONTHLY.
+
+Two details worth keeping:
+- **Floating times.** `DTSTART:20250310T064500` with no timezone and no Z means
+  06:45 wherever you are, which is what a wake-up time means.
+- **BYMONTHDAY=31 silently skips February**, because the spec drops dates that
+  do not exist. Rent would just not appear that month. Listing 28,29,30,31 with
+  `BYSETPOS=-1` picks the last day that exists, reproducing the clamping in
+  `clampMonthDay` so the calendar and the Dates screen never disagree.
+
+Chores and restocking are not exported. Their due dates move every time you tick
+one, and a repeating event cannot follow that; it would drift and start lying
+within a fortnight. The pressure model stays in the app, where it can be right.

@@ -1,4 +1,7 @@
-// Hand-written on purpose: one user, one app shell, nothing to configure.
+// Hand-written on purpose: one app shell, nothing to configure. This is the
+// whole of HouseOS's "backend" — an offline cache, so the app opens on a dead
+// signal in a shop basement. There is no push handler because there is no push
+// service: reminders are handed to the phone's own calendar instead.
 const CACHE = "houseos-v1";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest"];
 
@@ -45,34 +48,5 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
     )
-  );
-});
-
-self.addEventListener("push", (event) => {
-  let data = { title: "HouseOS", body: "Something's due." };
-  try {
-    if (event.data) data = { ...data, ...event.data.json() };
-  } catch {
-    /* keep the default */
-  }
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: data.tag || "houseos",
-      data: { url: data.url || "/" },
-    })
-  );
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const url = event.notification.data?.url || "/";
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const c of list) if ("focus" in c) return c.focus();
-      return self.clients.openWindow(url);
-    })
   );
 });

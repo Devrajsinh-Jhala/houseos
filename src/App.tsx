@@ -15,7 +15,6 @@ import {
   snooze as snoozeItem,
   uncomplete,
 } from "./db";
-import { refreshSchedule } from "./push";
 import { storedTheme, watchSystem } from "./theme";
 import { SEED } from "./seed";
 import { doneToday, needsAttention, type Item } from "./core";
@@ -143,9 +142,6 @@ export default function App() {
     );
     setEditing(null);
     toast("Saved");
-    // The server keeps its own copy of the routine times; this is what stops it
-    // going stale behind your back.
-    if (item.kind === "routine") void refreshSchedule();
   };
 
   const deleteItem = async (item: Item) => {
@@ -153,7 +149,6 @@ export default function App() {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     setEditing(null);
     toast("Deleted");
-    if (item.kind === "routine") void refreshSchedule();
   };
 
   const heading = TABS.find((t) => t.key === tab)!.label;
