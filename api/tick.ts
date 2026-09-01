@@ -1,8 +1,17 @@
+import { Redis } from "@upstash/redis";
 import webpush from "web-push";
-import { DEVICES, notConfigured, store, type StoredDevice } from "./_store";
+// Type-only, so TypeScript erases it and nothing has to resolve at runtime.
+// See the note at the top of subscribe.ts about why these files don't share
+// a runtime module.
+import type { StoredDevice } from "./subscribe";
 
-// Runs every 15 minutes (see vercel.json). Web push has no client-side
-// scheduling on iOS, so the moment-of-event send happens here.
+// Runs every 15 minutes. On Vercel Pro that's a cron in vercel.json; on the free
+// tier it's .github/workflows/tick.yml, because Hobby allows one run per day.
+// Web push has no client-side scheduling on iOS, so the moment-of-event send
+// happens here.
+
+/** Duplicated from subscribe.ts — change one, change both. */
+const DEVICES = "houseos:devices";
 
 const WINDOW_MIN = 15;
 
@@ -10,6 +19,14 @@ const WINDOW_MIN = 15;
 const STALE_DAYS = 180;
 
 export const config = { runtime: "nodejs" };
+
+let client: Redis | null = null;
+
+/** Lazy, so a deployment with no Upstash store fails readably instead of on import. */
+function store(): Redis {
+  if (!client) client = Redis.fromEnv();
+  return client;
+}
 
 function minutesNowIn(timezone: string): { minutes: number; weekday: number } {
   const now = new Date();
@@ -54,7 +71,9 @@ function dueNow(device: StoredDevice) {
 export default async function handler(): Promise<Response> {
   const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    return new Response("VAPID keys not configured", { status: 500 });
+    // 503, not 500: running HouseOS with reminders off is a supported choice,
+    // and the scheduler pinging this should not report it as a fault.
+    return Response.json({ error: "No VAPID keys — reminders are off." }, { status: 503 });
   }
   webpush.setVapidDetails(
     VAPID_SUBJECT || "mailto:you@example.com",
@@ -62,11 +81,14 @@ export default async function handler(): Promise<Response> {
     VAPID_PRIVATE_KEY
   );
 
-  let redis;
+  let redis: Redis;
   try {
     redis = store();
   } catch {
-    return notConfigured();
+    return Response.json(
+      { error: "No Redis store configured — reminders are off for this deployment." },
+      { status: 503 }
+    );
   }
 
   const devices = (await redis.hgetall<Record<string, StoredDevice>>(DEVICES)) ?? {};

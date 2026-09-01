@@ -1,6 +1,44 @@
-import { DEVICES, deviceId, notConfigured, store, type StoredDevice } from "./_store";
+import { createHash } from "node:crypto";
+import { Redis } from "@upstash/redis";
 
-export type { StoredDevice };
+// Self-contained on purpose. Each file under api/ is built as its own function,
+// and a shared runtime module between them is fragile here: an underscore-
+// prefixed helper is excluded from the build outright, and a plain relative
+// import needs a file extension once it runs as ESM on Node. The only thing
+// tick.ts borrows from this file is the StoredDevice *type*, which TypeScript
+// erases at compile time and so never has to resolve at runtime.
+//
+// The upshot: DEVICES below is duplicated in tick.ts. Change one, change both.
+
+// One field per device, keyed by a hash of its push endpoint. The first cut of
+// this used a single key for one device, which meant the second person to
+// install the app silently evicted the first.
+export const DEVICES = "houseos:devices";
+
+export interface StoredDevice {
+  subscription: { endpoint: string; keys?: Record<string, string> };
+  timezone: string;
+  /** Routine anchors mirrored from the phone, so the cron knows when to fire. */
+  schedule: { name: string; time: string; dayScope: "any" | "weekday" | "weekend" }[];
+  updatedAt: string;
+}
+
+function deviceId(endpoint: string): string {
+  return createHash("sha256").update(endpoint).digest("hex").slice(0, 24);
+}
+
+let client: Redis | null = null;
+
+/**
+ * Lazy. `Redis.fromEnv()` throws when the Upstash variables are missing, and at
+ * module scope that throw happens on import — so a deployment without a Redis
+ * store returns an opaque crash instead of a readable error. Push is optional
+ * in this app; skipping it should not look like a broken deploy.
+ */
+function store(): Redis {
+  if (!client) client = Redis.fromEnv();
+  return client;
+}
 
 export const config = { runtime: "nodejs" };
 
@@ -8,11 +46,14 @@ export const config = { runtime: "nodejs" };
 const MAX_ANCHORS = 100;
 
 export default async function handler(req: Request): Promise<Response> {
-  let redis;
+  let redis: Redis;
   try {
     redis = store();
   } catch {
-    return notConfigured();
+    return Response.json(
+      { error: "No Redis store configured — reminders are off for this deployment." },
+      { status: 503 }
+    );
   }
 
   if (req.method === "DELETE") {

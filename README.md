@@ -181,7 +181,6 @@ public/
   sw.js          hand-written: offline shell + push handlers
   manifest.webmanifest
 api/
-  _store.ts      Redis client, device keying — not routed (underscore)
   subscribe.ts   stores one device per endpoint + its routine anchors
   tick.ts        cron, sends what's due in the next 15 minutes
 .github/
