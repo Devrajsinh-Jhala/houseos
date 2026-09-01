@@ -1,9 +1,6 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "crons": [
-    { "path": "/api/tick", "schedule": "*/15 * * * *" }
-  ],
   "headers": [
     {
       "source": "/sw.js",

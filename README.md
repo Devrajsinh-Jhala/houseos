@@ -82,9 +82,22 @@ npm i -g vercel
 vercel
 ```
 
-Vite builds to `dist/`. `vercel.json` is already set up, including a cron that
-hits `/api/tick` every 15 minutes. It works fine with no backend at all — you
-just don't get push.
+Vite builds to `dist/`; `vercel.json` is already set up. It works fine with no
+backend at all — you just don't get push.
+
+**On the free tier, the reminder schedule lives in GitHub Actions, not Vercel.**
+Vercel's Hobby plan allows one cron run per day, which is useless to an app whose
+job is "tell me at 06:45", so `.github/workflows/tick.yml` pings `/api/tick`
+every 15 minutes instead. Set a repository variable `TICK_URL` to
+`https://your-app.vercel.app/api/tick` and it starts working. On Pro, delete that
+workflow and put the cron back in `vercel.json`:
+
+```json
+"crons": [{ "path": "/api/tick", "schedule": "*/15 * * * *" }]
+```
+
+GitHub's scheduled runs are best-effort and can land a few minutes late, so a
+badly delayed run can miss an anchor. It is a free cron, priced accordingly.
 
 ## Install on iPhone
 
@@ -168,8 +181,11 @@ public/
   sw.js          hand-written: offline shell + push handlers
   manifest.webmanifest
 api/
+  _store.ts      Redis client, device keying — not routed (underscore)
   subscribe.ts   stores one device per endpoint + its routine anchors
   tick.ts        cron, sends what's due in the next 15 minutes
+.github/
+  workflows/tick.yml   the free-tier scheduler
 ```
 
 `NOTES.md` has the design tokens and the reasoning behind them.
