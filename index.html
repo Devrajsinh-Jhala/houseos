@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>HouseOS</title>
+    <meta name="description" content="Running the house, one tick at a time." />
+    <meta name="theme-color" content="#f4f5f1" />
+    <script>
+      // Before first paint, or the app flashes light on the way into dark.
+      (function () {
+        try {
+          var t = localStorage.getItem("houseos:theme");
+          if (t === "light" || t === "dark") {
+            document.documentElement.setAttribute("data-theme", t);
+          }
+          var dark =
+            t === "dark" ||
+            (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute("content", dark ? "#12160f" : "#f4f5f1");
+        } catch (e) {
+          /* storage blocked — the CSS media query still gets it right */
+        }
+      })();
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="HouseOS" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
