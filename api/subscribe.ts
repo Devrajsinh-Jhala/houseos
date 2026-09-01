@@ -38,6 +38,12 @@ let client: Redis | null = null;
  */
 function store(): Redis | null {
   if (client) return client;
+  // Checked explicitly rather than relying on fromEnv() to throw: it does not
+  // always, and a half-built client fails later on the first command with a
+  // 500 instead of the clean "not configured" answer this is here to give.
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
   try {
     client = Redis.fromEnv();
     return client;
