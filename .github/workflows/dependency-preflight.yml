@@ -1,0 +1,38 @@
+name: Dependency preflight
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Review dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Reviews direct dependencies without installing or executing any of them.
+      # Fails only on a Block verdict, so a Caution reports without breaking the
+      # build. Drop `direct-only` to walk the whole lockfile tree instead.
+      - name: Scan dependencies
+        uses: Devrajsinh-Jhala/NPM-Vibe-check@v2
+        with:
+          direct-only: true
+          fail-on: block
+
+      # npm 12 turns install scripts off by default. This reports which
+      # dependencies would need an allowScripts entry, and what each script does.
+      # Informational here: it never fails the build.
+      - name: Review install-script permissions
+        uses: Devrajsinh-Jhala/NPM-Vibe-check@v2
+        with:
+          command: approve-scripts
+          fail-on: never
