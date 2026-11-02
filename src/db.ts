@@ -260,3 +260,26 @@ export async function seedIfEmpty(seed: Item[]): Promise<void> {
   }
   await tx.done;
 }
+
+/** A new home starts empty. Existing device-local records are always retained. */
+export async function initializeHome(): Promise<void> {
+  const d = await db();
+  const tx = d.transaction("meta", "readwrite");
+  try {
+    if (!(await tx.store.get("initialized"))) await tx.store.put(true, "initialized");
+    await tx.done;
+  } catch (error) { return rollback(tx, error); }
+}
+
+/** User-requested fresh start: remove every household record and local metadata. */
+export async function resetHome(): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(["items", "events", "meta"], "readwrite");
+  try {
+    await tx.objectStore("items").clear();
+    await tx.objectStore("events").clear();
+    await tx.objectStore("meta").clear();
+    await tx.objectStore("meta").put(true, "initialized");
+    await tx.done;
+  } catch (error) { return rollback(tx, error); }
+}

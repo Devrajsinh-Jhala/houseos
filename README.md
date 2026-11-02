@@ -1,5 +1,7 @@
 # HouseOS
 
+Every new device starts empty. Add your own tasks, inventory, meals, and bills; nothing is scheduled or filled in automatically. Each browser stores its own household data locally, with no account or cross-device sync. To remove existing records, use **Settings → Start fresh → Clear all household data**. Clearing data also removes home settings, and the app stays empty after a reload.
+
 **Your home, handled.** HouseOS is a personal home manager for someone running a household on their own: plan the week, keep up with chores, know what is in the cupboard, shop with a list, decide what to cook, and remember the bills.
 
 It is an offline-capable React PWA. Household records are stored in IndexedDB on the device. There is no account, application server, API key, analytics service, or automatic cloud sync.
@@ -21,12 +23,12 @@ It is an offline-capable React PWA. Household records are stored in IndexedDB on
 ## Make it your home
 
 1. Open **Settings** and save your daily rhythm. An evening chore set to “after arriving home” follows your arrival time automatically; weekend home time is separate.
-2. Review the starter routines and chores. Edit the days, durations, and rooms to match the way you actually live. Defaults are examples, not recommendations about your home.
+2. Add your own routines and chores. Choose the days, durations, rooms, and repeat rules that match the way you live.
 3. Add a few items to **Inventory**, entering quantities you really have. Inventory, meals, and handbook records start empty; the app does not invent stock or personal information.
 4. Queue what you need, plan a few meals, and put your monthly bills in one place.
 5. Export a backup after setup, then return to **Overview** for the daily checklist.
 
-The starter list includes Indian-context supplies, routine examples, bills, and maintenance reminders. An older installation keeps its existing records; the new starter list does not overwrite it. Legacy chores and supplies with no known completion date stay in **Not set up yet** until you establish a baseline. Removing every task does not cause the defaults to return on the next launch.
+New installations contain no records. An older installation keeps its existing records until you clear them through Settings. Legacy chores and supplies with no known completion date stay in **Not set up yet** until you establish a baseline. Clearing the home or removing every task leaves the app empty after a reload.
 
 ## Schedules that fit around your day
 

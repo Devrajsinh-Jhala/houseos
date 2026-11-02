@@ -26,15 +26,33 @@ export function Meals({ meals, now, onChange, onAddToShopping, toast }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
   const closeRef = useRef(() => {});
   closeRef.current = () => { if (!pending) { setDraft(null); setError(""); } };
 
   useEffect(() => {
     if (!draft) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     nameRef.current?.focus();
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") closeRef.current(); };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
+      if (event.key !== "Tab") return;
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]');
+      if (!controls?.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!dialogRef.current?.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
     document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("keydown", key);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
   }, [draft?.id]);
 
   const days = Array.from({ length: 7 }, (_, i) => shiftMealDate(weekStart, i));
@@ -78,7 +96,7 @@ export function Meals({ meals, now, onChange, onAddToShopping, toast }: Props) {
     <div className="meals-view">
       <div className="meals-intro">
         <div><p className="meals-eyebrow">One less daily decision</p><h2>What’s cooking?</h2><p>Plan a few meals. Shop once. Make room for leftovers.</p></div>
-        <button className="btn" onClick={() => open(today, "dinner")} disabled={pending}>+ Plan a meal</button>
+        <button className="btn" onClick={() => open(today >= weekStart && today <= shiftMealDate(weekStart, 6) ? today : weekStart, "dinner")} disabled={pending}>+ Plan a meal</button>
       </div>
 
       <div className="meals-toolbar">
@@ -123,7 +141,7 @@ export function Meals({ meals, now, onChange, onAddToShopping, toast }: Props) {
         {ingredients.length > 0 && <><div className="meal-ingredient-tags">{ingredients.map((ingredient) => <span key={ingredient}>{ingredient}</span>)}</div><button className="btn" onClick={() => void shop()} disabled={pending}>{pending ? "Adding…" : "Add ingredients to shopping"}</button></>}
       </section>
 
-      {draft && <div className="sheet" onClick={() => closeRef.current()}><form className="panel meal-editor" role="dialog" aria-modal="true" aria-labelledby="meal-dialog-title" onClick={(event) => event.stopPropagation()} onSubmit={(event) => {
+      {draft && <div className="sheet" onClick={() => closeRef.current()}><form ref={dialogRef} tabIndex={-1} className="panel meal-editor" role="dialog" aria-modal="true" aria-labelledby="meal-dialog-title" onClick={(event) => event.stopPropagation()} onSubmit={(event) => {
         event.preventDefault();
         if (!draft.name.trim() || pending) return;
         const updated = { ...draft, name: draft.name.trim(), ingredients: mealIngredients([{ ...draft, ingredients: ingredientText.split(/[\n,]/) }]), note: draft.note?.trim() || undefined };

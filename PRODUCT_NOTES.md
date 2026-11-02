@@ -20,7 +20,7 @@ HouseOS now supports the daily work of running a home alone while retaining the 
 ## Practical defaults
 
 - Existing installations retain their saved records. New schedule fields are optional and old task records preserve their original behavior.
-- New installations receive editable chore, maintenance, routine, and supply examples. Inventory, meals, and personal handbook information start empty.
+- New installations start with no tasks, routines, bills, inventory, meals, or handbook records. Settings show editable suggestions until the user saves their availability. The Start fresh action clears all household records and settings on the current device and does not reseed them.
 - Completing a task records actual work; snoozing does not. An incomplete one-off task remains actionable until completed, snoozed, or changed.
 - The household day rolls over at 04:00. Bill payment state follows the civil calendar month.
 - Quantity and bill information are entered by the user. The app does not infer ownership, current stock, amounts paid, or trusted contacts.

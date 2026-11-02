@@ -73,5 +73,8 @@ export function registerOffline(): void {
     watch(registration.installing);
     watch(registration.waiting);
     registration.addEventListener("updatefound", () => watch(registration.installing));
+    // Reopening a cache-first shell must also check for a newer published build.
+    // A failed online check leaves the already installed offline version usable.
+    void registration.update().catch(() => {});
   }).catch(unavailable);
 }

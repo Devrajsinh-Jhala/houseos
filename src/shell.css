@@ -68,3 +68,112 @@ body{font-size:14px;line-height:1.5;background:var(--paper)}
 .mobile-menu-scrim{display:none}
 @media(max-width:700px){.mobile-nav>button{min-width:0;flex:1;font-size:7px}.mobile-nav{gap:1px;padding-left:5px;padding-right:5px}.mobile-menu-scrim{display:flex;position:fixed;inset:0;z-index:29;align-items:flex-end;background:var(--scrim);padding:20px 12px calc(85px + env(safe-area-inset-bottom))}.mobile-more-menu{border:1px solid var(--rule);background:var(--surface);width:100%;padding:16px;border-radius:13px;box-shadow:0 4px 25px #0002}.mobile-more-menu>div{display:flex;justify-content:space-between;align-items:center;padding:0 10px 10px;font-size:13px}.mobile-more-menu>div button{font-size:24px;min-width:32px}.mobile-more-menu>button{display:flex;align-items:center;gap:13px;padding:13px 10px;font-size:12px;width:100%;border-radius:7px;color:var(--muted)}.mobile-more-menu>button.active{background:var(--primary-soft);color:var(--primary)}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* Readable controls, consistent card spacing, and a useful first screen. */
+.workspace,.scroll,.page-heading>div,.metric-body,.dashboard-columns>*,.field{min-width:0}
+.nav-label-short{display:none}.mobile-nav .nav-label-full{display:none}.mobile-nav .nav-label-short{display:inline}
+.two{grid-template-columns:repeat(2,minmax(0,1fr))}.field input,.field select,.field textarea{min-width:0}
+.scroll{width:100%}
+.page-heading h1{font-size:30px;line-height:1.25;max-width:none}
+.page-description{font-size:14px;max-width:none;line-height:1.6}
+.eyebrow,.nav-label{font-size:10px;line-height:1.6}
+.breadcrumb,.today-label{font-size:12px}
+.side-nav button{font-size:13px;min-height:46px}
+.home-selector strong{font-size:13px}.home-selector small,.sidebar-bottom,.sidebar-bottom small{font-size:11px}
+.btn{font-size:13px;min-height:44px}.btn.small{font-size:12px;min-height:40px}
+.chip{font-size:12px;min-height:40px}
+.field label,.field-label{font-size:13px}
+.field input,.field select,.field textarea{font-size:14px;min-height:44px}
+.note{font-size:14px;line-height:1.7}.hint{font-size:12px;line-height:1.7}
+.metric-grid{margin-bottom:22px}
+.metric-card{min-height:130px;padding:18px;gap:12px}
+.metric-body>span:first-child{font-size:12px;white-space:normal;line-height:1.5;min-height:18px}
+.metric-body strong{font-size:30px;margin:8px 0}
+.metric-body strong small,.metric-body em{font-size:11px;white-space:normal;line-height:1.5}
+.welcome-card{min-height:210px;margin-bottom:24px}
+.welcome-card p{font-size:13px;line-height:1.7;max-width:420px;color:var(--muted)}
+.welcome-tag{font-size:10px}.welcome-card h2{font-size:29px}
+.welcome-empty{min-height:170px;padding-top:22px;padding-bottom:22px}
+.welcome-empty h2{font-size:27px;margin-top:8px}
+.welcome-empty .home-drawing{width:240px;height:170px}
+.text-link{font-size:13px;min-height:40px}
+.card-heading h2{font-size:18px}.card-heading p{font-size:12px;line-height:1.6}
+.card-heading .text-link{font-size:12px}
+.week-strip button{min-height:72px}.week-strip button>span{font-size:12px}.week-strip strong{font-size:20px}
+.day-heading,.day-heading>span{font-size:12px;line-height:1.6}
+.rhythm-label,.rhythm-label strong{font-size:12px}.rhythm-label>span:last-child{font-size:11px}
+.daily-task{min-height:78px;gap:12px}
+.task-time{font-size:12px;width:65px}
+.task-check{width:30px;height:30px;border-radius:8px}
+.daily-task:not(:last-child):after{display:none}
+.task-description strong{font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.task-description>span{font-size:12px;line-height:1.6}
+.task-badge{font-size:10px;flex-shrink:0}
+.add-inline{font-size:12px;min-height:48px}
+.home-routine-card .eyebrow,.meal-preview .eyebrow{font-size:10px}
+.arrival-heading h3{font-size:16px}.arrival-heading p{font-size:13px}
+.home-routine-card>p,.meal-preview p{font-size:13px;line-height:1.7}
+.home-routine-card .text-link,.meal-preview .text-link{font-size:12px}
+.attention-card h2{font-size:17px}.pill{font-size:11px}
+.attention-item{min-height:77px}.attention-item strong{font-size:13px;line-height:1.5}
+.attention-item small{font-size:12px;line-height:1.6}
+.meal-preview h3{font-size:22px}.meal-preview p{max-width:210px}
+.setup-nudge strong{font-size:12px}.setup-nudge small{font-size:11px}
+.empty{font-size:14px;line-height:1.7}.dashboard-empty{padding:34px 20px}
+.day-preview-note{font-size:12px;color:var(--muted);line-height:1.7}
+.row .name{font-size:14px;line-height:1.5}.row .meta,.row .when{font-size:12px;line-height:1.6}
+.row .tick{width:30px;height:30px;border-radius:8px}
+.page-footer{font-size:11px}.page-footer>span:last-child{font-size:10px}
+.availability-banner span:not(.availability-icon),.plan-task-meta,.plan-task-note{font-size:12px}
+.plan-task-title{font-size:14px}.plan-time{font-size:12px}.plan-check{width:30px;height:30px}
+.week-controls .icon-button{width:36px;min-height:40px;text-align:center}
+.week-day-name,.week-day-minutes,.week-day-tasks{font-size:11px}
+.house-task-stats>div>span,.house-task-eyebrow{font-size:11px}
+.house-task-stats>div>small,.house-task-month-count,.house-row-priority{font-size:12px}
+.stock-stat>span,.stock-target,.stock-category,.stock-badge,.meal-slot-label,.meal-slot-count{font-size:11px}
+.reset-card{margin-top:30px;border:1px solid var(--rule);border-radius:12px;padding:24px;background:var(--surface)}
+.reset-card h2{font-family:var(--display);font-size:20px;margin:0}.reset-card .note{margin-top:9px}
+.reset-confirmation{margin-top:15px;padding:18px;border:1px solid var(--over);border-radius:8px}
+.reset-confirmation h3{margin:0 0 8px;font-size:16px}.reset-confirmation p{font-size:13px;line-height:1.7}
+.reset-confirmation .btn-row{margin-bottom:0}.setup-status{font-size:12px;color:var(--muted);line-height:1.7}
+@media(max-width:1200px){.dashboard-columns{grid-template-columns:minmax(0,1fr) 270px}.metric-card{gap:9px;padding:15px}.metric-body>span:first-child{font-size:11px}.metric-body strong small{font-size:11px}}
+@media(max-width:1050px){.dashboard-columns{grid-template-columns:minmax(0,1fr)}.dashboard-rail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){
+  .scroll{padding:22px 18px 20px}.page-heading{align-items:center;margin-bottom:20px}
+  .page-heading h1{font-size:26px;max-width:none;letter-spacing:-.7px}
+  .page-heading .eyebrow{font-size:10px;margin-bottom:7px}.page-description{font-size:13px;max-width:none}
+  .breadcrumb{font-size:11px;gap:9px}.today-label{font-size:11px}
+  .page-heading .add-task{font-size:0;width:44px;height:44px;min-width:44px;padding:0;gap:0;flex:none}.add-task svg{width:20px;height:20px;flex-shrink:0}
+  .welcome-card{min-height:185px;padding:22px;margin-bottom:22px}.welcome-content{max-width:75%}
+  .welcome-card h2{font-size:27px}.welcome-card p{font-size:12px;max-width:300px}
+  .welcome-tag{font-size:9px}.home-drawing{width:185px;right:-25px;opacity:.7}
+  .welcome-empty{min-height:165px}.welcome-empty h2{font-size:25px}.welcome-empty .home-drawing{width:175px;height:140px;right:-20px}
+  .welcome-card .text-link{font-size:12px}.metric-grid{gap:12px;margin-bottom:20px}
+  .metric-card{padding:15px 12px;min-height:132px;gap:10px}
+  .metric-body>span:first-child{font-size:12px}.metric-body strong{font-size:28px}
+  .metric-body strong small,.metric-body em{font-size:11px}
+  .metric-icon{width:32px;height:32px}.metric-icon svg{width:19px;height:19px}
+  .dashboard-rail{display:flex;gap:18px}.day-card{padding:20px 16px 4px}
+  .card-heading{gap:8px}.card-heading h2{font-size:17px}.card-heading p{font-size:12px}
+  .card-heading .text-link{font-size:11px;gap:4px}.week-strip{gap:3px;padding:16px 0}
+  .week-strip button{min-height:62px;height:65px}.week-strip button>span{font-size:11px}
+  .week-strip strong{font-size:20px}.day-heading{font-size:12px;flex-wrap:wrap}
+  .daily-task{gap:10px;min-height:78px}.task-time{width:54px;font-size:11px}
+  .task-check{width:28px;height:28px}.task-description strong{font-size:13px}
+  .task-description>span{font-size:11px}.task-badge{font-size:9px;padding:4px}
+  .rhythm-label,.rhythm-label strong{font-size:12px}.rhythm-label>span:last-child{font-size:10px}
+  .home-routine-card,.attention-card,.meal-preview{padding:21px}
+  .arrival-heading h3{font-size:17px}.arrival-heading p,.home-routine-card>p,.attention-item strong,.meal-preview p{font-size:13px}
+  .home-routine-card .text-link,.meal-preview .text-link,.attention-item small{font-size:12px}
+  .mobile-nav{padding-left:7px;padding-right:7px;min-height:72px}
+  .mobile-nav>button{font-size:10px;gap:5px;min-height:58px;font-weight:500}
+  .mobile-nav svg{width:21px;height:21px}.mobile-nav .nav-count{font-size:9px;min-width:16px;height:16px;right:6px}
+  .mobile-more-menu>button{font-size:14px;min-height:48px}.mobile-more-menu>div{font-size:15px}
+  .page-footer{font-size:11px;padding-bottom:8px}.settings-grid{grid-template-columns:1fr}
+  .settings-card,.reset-card{padding:20px}.field input,.field select,.field textarea{font-size:16px}
+  .btn-row .btn{font-size:12px}.plan-task-meta,.plan-task-note{font-size:12px}.plan-time{font-size:11px}
+  .house-task-stats>div>span{font-size:10px}.house-task-stats>div>small{font-size:12px}
+  .stock-stat>span,.stock-category,.stock-target,.stock-badge,.meal-slot-label,.meal-slot-count{font-size:11px}
+  .stock-toolbar{flex-wrap:wrap}.stock-segment{max-width:100%}.stock-segment button{font-size:12px;padding:10px}
+}
+@media(max-width:380px){.metric-card{gap:7px;padding:12px 10px}.metric-icon{width:27px;height:27px}.metric-body>span:first-child{font-size:11px}.metric-body strong small{display:block}.metric-body strong{margin:5px 0}.page-heading h1{font-size:24px}.welcome-content{max-width:83%}.welcome-empty .home-drawing{opacity:.35}.mobile-nav>button{font-size:9px}.card-heading .text-link{font-size:10px}.task-badge{display:none}}

@@ -100,6 +100,66 @@ describe("household backups", () => {
 });
 
 describe("initialization and completion transactions", () => {
+  it("initializes a new device with zero tasks, history, or household records", async () => {
+    await Promise.all([store.initializeHome(), store.initializeHome()]);
+    expect(await store.allItems()).toEqual([]);
+    expect(await store.allEvents()).toEqual([]);
+    expect(await store.getMeta("initialized")).toBe(true);
+    for (const key of ["inventory", "meals", "contacts", "householdSettings"]) {
+      expect(await store.getMeta(key)).toBeUndefined();
+    }
+  });
+
+  it("preserves existing household records when initializing an upgraded device", async () => {
+    await store.putItem(item());
+    await store.setMeta("inventory", [stock]);
+    await store.setMeta("householdSettings", DEFAULT_SETTINGS);
+    await store.initializeHome();
+    expect(await store.allItems()).toEqual([item()]);
+    expect(await store.getMeta("inventory")).toEqual([stock]);
+    expect(await store.getMeta("householdSettings")).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("clears all household data and metadata on reset and stays empty after reload", async () => {
+    await store.complete(item(), new Date("2026-11-02T14:00:00Z"));
+    await store.setMeta("inventory", [stock]);
+    await store.setMeta("meals", [meal]);
+    await store.setMeta("contacts", [contact]);
+    await store.setMeta("householdSettings", DEFAULT_SETTINGS);
+    await store.setMeta("lastBackup", "2026-11-02T12:00:00Z");
+    await store.setMeta("otherLocalMetadata", { arbitrary: true });
+    await store.resetHome();
+    await store.initializeHome();
+    vi.resetModules();
+    const reloaded = await import("./db");
+    await reloaded.initializeHome();
+    expect(await reloaded.allItems()).toEqual([]);
+    expect(await reloaded.allEvents()).toEqual([]);
+    for (const key of ["inventory", "meals", "contacts", "householdSettings", "lastBackup", "otherLocalMetadata"]) {
+      expect(await reloaded.getMeta(key)).toBeUndefined();
+    }
+    expect(await reloaded.getMeta("initialized")).toBe(true);
+    // Even the old optional seed helper must not repopulate a reset home.
+    await reloaded.seedIfEmpty([item()]);
+    expect(await reloaded.allItems()).toEqual([]);
+  });
+
+  it("rolls back every record if clearing local metadata fails during reset", async () => {
+    const completed = await store.complete(item(), new Date("2026-11-02T14:00:00Z"));
+    await store.setMeta("inventory", [stock]);
+    await store.setMeta("lastBackup", "2026-11-02T12:00:00Z");
+    const clear = IDBObjectStore.prototype.clear;
+    vi.spyOn(IDBObjectStore.prototype, "clear").mockImplementation(function(this: IDBObjectStore) {
+      if (this.name === "meta") throw new DOMException("Simulated reset failure", "UnknownError");
+      return clear.call(this);
+    });
+    await expect(store.resetHome()).rejects.toThrow("Simulated reset failure");
+    expect(await store.allItems()).toEqual([completed]);
+    expect(await store.eventsForItem("chore")).toHaveLength(1);
+    expect(await store.getMeta("inventory")).toEqual([stock]);
+    expect(await store.getMeta("lastBackup")).toBe("2026-11-02T12:00:00Z");
+  });
+
   it("seeds once under concurrent mounts and preserves an intentionally empty home", async () => {
     await Promise.all([store.seedIfEmpty([item()]), store.seedIfEmpty([item({ id: "duplicate" })])]);
     expect(await store.allItems()).toHaveLength(1);

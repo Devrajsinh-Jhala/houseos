@@ -35,18 +35,23 @@ function download(blob: Blob, filename: string) {
 interface Props {
   items: Item[];
   settings: HouseholdSettings;
+  isConfigured?: boolean;
   onSettingsChange: (settings: HouseholdSettings) => Promise<void>;
+  onReset: () => Promise<void>;
   onEdit: (item: Item) => void;
   onAdd: () => void;
   onReload: () => void | Promise<void>;
   toast: (msg: string) => void;
 }
 
-export function Manage({ items, settings, onSettingsChange, onEdit, onAdd, onReload, toast }: Props) {
+export function Manage({ items, settings, isConfigured=false, onSettingsChange, onReset, onEdit, onAdd, onReload, toast }: Props) {
   const offlineStatus = useOfflineStatus();
   const [kind, setKind] = useState<Kind>("chore");
   const [draftSettings, setDraftSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
+  const [confirmReset,setConfirmReset] = useState(false);
+  const [resetting,setResetting] = useState(false);
+  const [resetError,setResetError] = useState("");
   const [restore, setRestore] = useState<{name: string; data: unknown} | null>(null);
   const [query, setQuery] = useState("");
   const [lastBackup, setLastBackup] = useState<string | null>(null);
@@ -109,6 +114,13 @@ export function Manage({ items, settings, onSettingsChange, onEdit, onAdd, onRel
     download(new Blob([ics], { type: "text/calendar" }), "houseos-routine.ics");
     toast(`${count} events exported`);
   };
+  const clearData = async () => {
+    if(resetting)return;
+    setResetting(true);setResetError("");
+    try {await onReset();setConfirmReset(false);}
+    catch {setResetError("Your data couldn't be cleared. Nothing has been changed. Please try again.");}
+    finally {setResetting(false);}
+  };
 
   const doImport = async (file: File) => {
     try {
@@ -128,6 +140,7 @@ export function Manage({ items, settings, onSettingsChange, onEdit, onAdd, onRel
     <>
       <form className="settings-card" onSubmit={e=>{e.preventDefault();void saveSettings();}}>
         <h2>Your home, your rhythm</h2>
+        {!isConfigured&&<p className="setup-status">Not configured yet · The values below are suggestions until you save.</p>}
         <p className="note">Set the shape of your day. Tasks set to “after arriving home” follow these times automatically.</p>
         <div className="settings-grid">
           <div className="field"><label htmlFor="home-name">Home name</label><input id="home-name" required maxLength={60} value={draftSettings.homeName} onChange={e=>setDraftSettings(d=>({...d,homeName:e.target.value}))}/></div>
@@ -266,6 +279,16 @@ export function Manage({ items, settings, onSettingsChange, onEdit, onAdd, onRel
       <p className="hint">
         Import the file into your calendar. It is a snapshot: re-export after changing arrival times, schedules, or completion dates. Interval chores export their next occurrence. Legacy restock reminders stay in HouseOS. Fixed-date tasks tied to arrival export the next 12 months.
       </p>
+      <section className="reset-card" aria-labelledby="reset-title">
+        <h2 id="reset-title">Start fresh</h2>
+        <p className="note">Clear tasks, schedules, completion history, inventory, shopping, meals, handbook records, and home settings on this device. New homes always start empty.</p>
+        {!confirmReset?<button className="btn danger" onClick={()=>setConfirmReset(true)}>Clear all household data</button>:<div className="reset-confirmation" role="alertdialog" aria-modal="false" aria-labelledby="reset-confirm-title">
+          <h3 id="reset-confirm-title">Clear everything on this device?</h3>
+          <p>This removes all household records and saved preferences. Export a backup first if you want a copy. Other devices are unaffected.</p>
+          {resetError&&<p role="alert">{resetError}</p>}
+          <div className="btn-row"><button className="btn danger" disabled={resetting} onClick={()=>void clearData()}>{resetting?"Clearing…":"Clear everything and start empty"}</button><button className="btn ghost" disabled={resetting} onClick={()=>setConfirmReset(false)}>Keep my data</button></div>
+        </div>}
+      </section>
     </>
   );
 }

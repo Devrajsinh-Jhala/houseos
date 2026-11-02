@@ -24,16 +24,34 @@ export function HomeGuide({ contacts, onChange, toast }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
   const closeRef = useRef(() => {});
   closeRef.current = () => { if (!pending) { setDraft(null); setError(""); } };
   const categories = [...new Set([...CONTACT_CATEGORIES, ...contacts.map((contact) => contact.category)])];
 
   useEffect(() => {
     if (!draft) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     nameRef.current?.focus();
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") closeRef.current(); };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
+      if (event.key !== "Tab") return;
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]');
+      if (!controls?.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!dialogRef.current?.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
     document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("keydown", key);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
   }, [draft?.id]);
 
   const open = (contact?: Partial<HomeContact>) => {
@@ -58,9 +76,9 @@ export function HomeGuide({ contacts, onChange, toast }: Props) {
     <div className="home-guide">
       <div className="home-guide-intro"><div><p className="home-guide-eyebrow">Know where to turn</p><h2>Your home handbook</h2><p>Trusted contacts, service details, and the things only you know about your home.</p></div><button className="btn" onClick={() => open()}>+ Add a record</button></div>
       <div className="home-guide-tools"><div className="field"><label htmlFor="contact-search" className="sr-only">Search home handbook</label><input type="search" id="contact-search" value={query} placeholder="Search names, numbers or notes…" onChange={(event) => setQuery(event.target.value)} /></div><div className="field"><label htmlFor="contact-category" className="sr-only">Filter home handbook</label><select id="contact-category" value={category} onChange={(event) => setCategory(event.target.value)}><option>All</option>{categories.map((entry) => <option key={entry}>{entry}</option>)}</select></div></div>
+      <div className="home-guide-count" aria-live="polite">{visible.length} record{visible.length === 1 ? "" : "s"}{category !== "All" ? ` in ${category}` : " for your home"}</div>
 
-      {contacts.length === 0 ? <section className="home-guide-empty"><span className="home-guide-symbol" aria-hidden="true">⌂</span><h3>A little preparation goes a long way.</h3><p>Add the people you call for repairs, where the main water valve is, or an appliance’s warranty details. Everything stays on this device.</p><div className="home-guide-starters">{starters.map((starter) => <button key={starter.name} onClick={() => open({ name: starter.name, category: starter.category })}><strong>+ {starter.name}</strong><span>{starter.hint}</span></button>)}</div></section> : <>
-        <div className="home-guide-count">{visible.length} record{visible.length === 1 ? "" : "s"}{category !== "All" ? ` in ${category}` : " for your home"}</div>
+      {contacts.length === 0 ? <section className="home-guide-empty"><span className="home-guide-symbol" aria-hidden="true">⌂</span><h3>No home records yet</h3><p>Add your own repair contacts, service details, or notes about your home. Start with a record type below.</p><div className="home-guide-starters">{starters.map((starter) => <button key={starter.name} onClick={() => open({ name: starter.name, category: starter.category })}><strong>+ {starter.name}</strong><span>{starter.hint}</span></button>)}</div></section> : <>
         {!visible.length && <p className="empty">No records match your search.</p>}
         <div className="home-guide-grid">{visible.map((contact) => {
           const call = phoneLink(contact.phone);
@@ -68,7 +86,7 @@ export function HomeGuide({ contacts, onChange, toast }: Props) {
         })}</div>
       </>}
 
-      {draft && <div className="sheet" onClick={() => closeRef.current()}><form className="panel home-guide-editor" role="dialog" aria-modal="true" aria-labelledby="contact-title" onClick={(event) => event.stopPropagation()} onSubmit={(event) => {
+      {draft && <div className="sheet" onClick={() => closeRef.current()}><form ref={dialogRef} tabIndex={-1} className="panel home-guide-editor" role="dialog" aria-modal="true" aria-labelledby="contact-title" onClick={(event) => event.stopPropagation()} onSubmit={(event) => {
         event.preventDefault();
         if (!draft.name.trim() || pending) return;
         const clean = { ...draft, name: draft.name.trim(), phone: draft.phone.trim(), note: draft.note.trim() };

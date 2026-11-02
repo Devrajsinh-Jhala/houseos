@@ -17,7 +17,8 @@ export function Chores({ items, now, justDone, onToggle, onEdit, onMarkAll }: Pr
   const [query, setQuery] = useState("");
   const [room, setRoom] = useState("all");
 
-  const chores = items.filter((i) => i.active && i.kind === "chore");
+  const savedChores = items.filter((i) => i.kind === "chore");
+  const chores = savedChores.filter((i) => i.active);
   const completed = (item: Item) => doneToday(item, now) || (item.scheduleMode === "once" && !!item.lastDone);
   const matches = (item: Item) => (room === "all" || (item.group?.trim() || "Other") === room) &&
     `${item.name} ${item.group ?? ""} ${item.note ?? ""}`.toLowerCase().includes(query.toLowerCase());
@@ -48,7 +49,7 @@ export function Chores({ items, now, justDone, onToggle, onEdit, onMarkAll }: Pr
       </div>
 
       {!visible.length && (mode === "completed" || !unset.length) && (
-        <div className="house-task-empty"><span aria-hidden="true">✓</span><h3>{query || room !== "all" ? "No matching chores" : mode === "completed" ? "Your finished tasks will be here" : mode === "all" ? "Make a little space for a routine" : "You’re up to date."}</h3><p>{query || room !== "all" ? "Try another search or room." : mode === "completed" ? "Completed one-off tasks stay here. Repeating chores also appear on the day you finish them." : mode === "all" ? "Add cleaning, laundry, plant care, or maintenance to your home." : "Check your weekly plan for what’s coming next."}</p></div>
+        <div className="house-task-empty"><span aria-hidden="true">{chores.length ? "✓" : "+"}</span><h3>{!savedChores.length ? "No chores yet" : !chores.length ? "No active chores" : query || room !== "all" ? "No matching chores" : mode === "completed" ? "Your finished tasks will be here" : mode === "all" ? "No chores in this view" : "No chores due right now"}</h3><p>{!savedChores.length ? "Use Add task to create your first chore. Choose when to do it, how often it repeats, and which room it belongs to." : !chores.length ? "Add a chore or unpause a saved one in Settings." : query || room !== "all" ? "Try another search or room." : mode === "completed" ? "Completed one-off tasks stay here. Repeating chores also appear on the day you finish them." : "Your weekly schedule shows what’s coming next."}</p></div>
       )}
 
       {groupBy(visible).map(([group, list]) => (

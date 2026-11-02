@@ -14,9 +14,8 @@ import { DEFAULT_SETTINGS, type HouseholdSettings } from "./planner";
 import { stockShoppingCount, validStockItem, type StockItem } from "./inventory";
 import { validMeal, type MealPlan } from "./meals";
 import { validHomeContact, type HomeContact } from "./homeGuide";
-import { allItems, complete, completeMany, putItem, removeItem, seedIfEmpty, snooze as snoozeItem, uncomplete, getMeta, setMeta } from "./db";
-import { storedTheme, watchSystem } from "./theme";
-import { SEED } from "./seed";
+import { allItems, complete, completeMany, putItem, removeItem, initializeHome, resetHome, snooze as snoozeItem, uncomplete, getMeta, setMeta } from "./db";
+import { applyTheme, storedTheme, watchSystem } from "./theme";
 import { doneToday, houseDay, needsAttention, uid, type Item, type Kind } from "./core";
 import { validSettings } from "./validation";
 import { paidThisMonth } from "./bills";
@@ -42,6 +41,7 @@ export default function App() {
   const [meals,setMeals]=useState<MealPlan[]>([]);
   const [contacts,setContacts]=useState<HomeContact[]>([]);
   const [settings,setSettings]=useState<HouseholdSettings>(DEFAULT_SETTINGS);
+  const [isConfigured,setIsConfigured]=useState(false);
   const [tab,setTab]=useState<Tab>("today");
   const [now,setNow]=useState(()=>new Date());
   const [ready,setReady]=useState(false);
@@ -54,6 +54,7 @@ export default function App() {
   const [online,setOnline]=useState(navigator.onLine);
   const [shoppingView,setShoppingView]=useState<"list"|"restock">("list");
   const [showMore,setShowMore]=useState(false);
+  const moreMenuRef=useRef<HTMLElement>(null);
   const busy=useRef(new Set<string>());
   const toastTimer=useRef<ReturnType<typeof setTimeout>>();
   const toast=useCallback((message:string)=>{
@@ -61,9 +62,27 @@ export default function App() {
     toastTimer.current=setTimeout(()=>setToastMsg(null),4200);
   },[]);
   useEffect(()=>()=>clearTimeout(toastTimer.current),[]);
+  useEffect(()=>{
+    if(!showMore)return;
+    const previous=document.activeElement as HTMLElement|null;
+    const overflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const controls=()=>moreMenuRef.current?.querySelectorAll<HTMLButtonElement>("button");
+    controls()?.[0]?.focus();
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){event.preventDefault();setShowMore(false);return;}
+      if(event.key!=="Tab")return;
+      const buttons=controls();if(!buttons?.length)return;
+      const first=buttons[0],last=buttons[buttons.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    };
+    document.addEventListener("keydown",onKey);
+    return()=>{document.removeEventListener("keydown",onKey);document.body.style.overflow=overflow;previous?.focus();};
+  },[showMore]);
   const load=useCallback(async()=>{
     try {
-      await seedIfEmpty(SEED);
+      await initializeHome();
       const [records,savedStock,savedMeals,savedContacts,savedSettings]=await Promise.all([
         allItems(),getMeta<unknown>("inventory"),getMeta<unknown>("meals"),getMeta<unknown>("contacts"),getMeta<unknown>("householdSettings")
       ]);
@@ -71,6 +90,7 @@ export default function App() {
       setMeals(Array.isArray(savedMeals)?savedMeals.filter(validMeal):[]);
       setContacts(Array.isArray(savedContacts)?savedContacts.filter(validHomeContact):[]);
       setSettings(validSettings(savedSettings)?savedSettings:DEFAULT_SETTINGS);
+      setIsConfigured(validSettings(savedSettings));
       setJustDone(new Set());setLoadError("");setReady(true);
     } catch {setLoadError("Your home data couldn't be opened. Please allow browser storage and try again.");}
   },[]);
@@ -109,7 +129,14 @@ export default function App() {
   const saveStock=async(next:StockItem[])=>{await setMeta("inventory",next);setStock(next);};
   const saveMeals=async(next:MealPlan[])=>{await setMeta("meals",next);setMeals(next);};
   const saveContacts=async(next:HomeContact[])=>{await setMeta("contacts",next);setContacts(next);};
-  const saveSettings=async(next:HouseholdSettings)=>{await setMeta("householdSettings",next);setSettings(next);};
+  const saveSettings=async(next:HouseholdSettings)=>{await setMeta("householdSettings",next);setSettings(next);setIsConfigured(true);};
+  const clearHome=async()=>{
+    await resetHome();
+    setItems([]);setStock([]);setMeals([]);setContacts([]);setJustDone(new Set());
+    setSettings(DEFAULT_SETTINGS);setIsConfigured(false);setEditing(null);setShowMore(false);
+    applyTheme("system");setTab("today");window.scrollTo({top:0,behavior:"instant"});
+    toast("All household data cleared. Your home is ready for a fresh start.");
+  };
   const addIngredients=async(names:string[])=>{
     const next=stock.map(i=>({...i}));
     for(const name of names.map(n=>n.trim()).filter(Boolean)){
@@ -125,7 +152,7 @@ export default function App() {
   const shoppingCount=stockShoppingCount(stock);
   const attention={shopping:shoppingCount,chores:items.filter(i=>i.kind==="chore"&&needsAttention(i,now)).length,dates:items.filter(i=>i.kind==="fixed"&&needsAttention(i,now)).length};
   const current=TABS.find(t=>t.key===tab)!;
-  const navItems=TABS.map(entry=><button key={entry.key} className={tab===entry.key?"active":""} aria-current={tab===entry.key?"page":undefined} onClick={()=>goTo(entry.key)}><Icon name={entry.key}/><span>{entry.label}</span>{attention[entry.key as keyof typeof attention]>0&&<span className="nav-count">{attention[entry.key as keyof typeof attention]}</span>}</button>);
+  const navItems=TABS.map(entry=><button key={entry.key} aria-label={entry.label} className={tab===entry.key?"active":""} aria-current={tab===entry.key?"page":undefined} onClick={()=>goTo(entry.key)}><Icon name={entry.key}/><span className="nav-label-full">{entry.label}</span><span className="nav-label-short">{entry.key==="planner"?"Schedule":entry.key==="shopping"?"Shopping":entry.label}</span>{attention[entry.key as keyof typeof attention]>0&&<span className="nav-count">{attention[entry.key as keyof typeof attention]}</span>}</button>);
   return <div className="app">
     <aside className="sidebar">
       <button className="brand" onClick={()=>goTo("today")} aria-label="HouseOS overview"><span className="brand-mark"><Icon name="home" size={25}/></span><span>house<span className="brand-os">os</span><small>YOUR HOME, HANDLED.</small></span></button>
@@ -136,22 +163,22 @@ export default function App() {
     <div className="workspace">
       <header className="topbar"><div className="breadcrumb"><Icon name="home" size={16}/><span>{settings.homeName}</span><span>/</span><strong>{current.label}</strong></div><div className="topbar-right"><span className="today-label">{now.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})}</span><span className="owner-avatar" title="Your personal home">{settings.homeName.trim().charAt(0).toUpperCase()||"H"}</span></div></header>
       <main className={`scroll view-${tab}`} id="main-content">
-        <div className="page-heading"><div><p className="eyebrow">{tab==="today"?"MAKE YOURSELF AT HOME":"A PLACE FOR EVERYTHING"}</p><h1>{tab==="today"?"A home that runs with you.":current.label}</h1><p className="page-description">{current.description}</p></div>{(tab==="today"||tab==="chores"||tab==="dates")&&<button className="btn add-task" onClick={()=>addTask(tab==="dates"?"fixed":"chore")}><Icon name="plus" size={18}/>Add task</button>}</div>
+        <div className="page-heading"><div><p className="eyebrow">{tab==="today"?"MAKE YOURSELF AT HOME":"A PLACE FOR EVERYTHING"}</p><h1>{tab==="today"?"Your home at a glance":current.label}</h1><p className="page-description">{current.description}</p></div>{(tab==="today"||tab==="chores"||tab==="dates")&&<button className="btn add-task" aria-label={tab==="dates"?"Add bill":"Add task"} onClick={()=>addTask(tab==="dates"?"fixed":"chore")}><Icon name="plus" size={18}/>{tab==="dates"?"Add bill":"Add task"}</button>}</div>
         {loadError?<div role="alert" className="empty">{loadError}<div className="btn-row"><button className="btn" onClick={()=>void load()}>Try again</button></div></div>:!ready?<p className="empty" role="status">Getting your home ready…</p>:<>
-          {tab==="today"&&<Today items={items} stock={stock} meals={meals} settings={settings} now={now} onToggle={toggle} onEdit={setEditing} onGoTo={goTo} onAdd={()=>addTask()}/>}
-          {tab==="planner"&&<Planner items={items} now={now} settings={settings} onEdit={setEditing} onAdd={date=>addTask("chore",date)} onToggle={toggle} onSettingsChange={saveSettings}/>}
+          {tab==="today"&&<Today items={items} stock={stock} meals={meals} settings={settings} isConfigured={isConfigured} now={now} onToggle={toggle} onEdit={setEditing} onGoTo={goTo} onAdd={date=>addTask("chore",date)}/>}
+          {tab==="planner"&&<Planner items={items} now={now} settings={settings} isConfigured={isConfigured} onEdit={setEditing} onAdd={date=>addTask("chore",date)} onToggle={toggle} onSettingsChange={saveSettings}/>}
           {tab==="chores"&&<Chores items={items} now={now} justDone={justDone} onToggle={toggle} onEdit={setEditing} onMarkAll={markAll}/>}
           {tab==="inventory"&&<Inventory stock={stock} now={now} onChange={saveStock} toast={toast} initialView="stock"/>}
           {tab==="shopping"&&<><div className="shop-toggle shopping-source"><button className="chip" aria-pressed={shoppingView==="list"} onClick={()=>setShoppingView("list")}>Shopping list{shoppingCount>0?` · ${shoppingCount}`:""}</button><button className="chip" aria-pressed={shoppingView==="restock"} onClick={()=>setShoppingView("restock")}>Restock reminders</button></div>{shoppingView==="list"?<Inventory stock={stock} now={now} onChange={saveStock} toast={toast} initialView="shopping"/>:<><p className="note">These reminders track how often you buy something. Use Inventory to track quantities and your shopping list.</p><Shopping items={items} now={now} justDone={justDone} onToggle={toggle} onEdit={setEditing} onMarkAll={markAll}/></>}</>}
           {tab==="meals"&&<Meals meals={meals} now={now} onChange={saveMeals} onAddToShopping={addIngredients} toast={toast}/>}
           {tab==="dates"&&<Dates items={items} now={now} justDone={justDone} onToggle={toggle} onEdit={setEditing}/>}
           {tab==="guide"&&<HomeGuide contacts={contacts} onChange={saveContacts} toast={toast}/>}
-          {tab==="manage"&&<Manage items={items} settings={settings} onSettingsChange={saveSettings} onEdit={setEditing} onAdd={()=>addTask()} onReload={load} toast={toast}/>}
+          {tab==="manage"&&<Manage items={items} settings={settings} isConfigured={isConfigured} onSettingsChange={saveSettings} onReset={clearHome} onEdit={setEditing} onAdd={()=>addTask()} onReload={load} toast={toast}/>}
         </>}
         <footer className="page-footer"><Icon name="leaf" size={14}/><span>A little each day goes a long way.</span><span>HouseOS · Your home, handled</span></footer>
       </main>
     </div>
-    {showMore&&<div className="mobile-menu-scrim" onClick={()=>setShowMore(false)}><nav className="mobile-more-menu" aria-label="More home tools" onClick={e=>e.stopPropagation()}><div><strong>More for your home</strong><button aria-label="Close more tools" onClick={()=>setShowMore(false)}>×</button></div>{navItems.slice(5)}</nav></div>}
+    {showMore&&<div className="mobile-menu-scrim" onClick={()=>setShowMore(false)}><nav ref={moreMenuRef} className="mobile-more-menu" aria-label="More home tools" onClick={e=>e.stopPropagation()}><div><strong>More for your home</strong><button aria-label="Close more tools" onClick={()=>setShowMore(false)}>×</button></div>{navItems.slice(5)}</nav></div>}
     <nav className="mobile-nav" aria-label="Main navigation">{navItems.slice(0,5)}<button className={TABS.findIndex(t=>t.key===tab)>=5?"active":""} aria-expanded={showMore} onClick={()=>setShowMore(s=>!s)}><Icon name="more"/><span>More</span></button></nav>
     <ItemSheet item={editing} groups={groups} defaultKind={defaultKind} defaultDate={defaultDate} settings={settings} onSave={saveItem} onDelete={deleteItem} onSnooze={doSnooze} onClose={()=>setEditing(null)}/>
     {toastMsg&&<div className="toast" role="status" aria-live="polite">{toastMsg}</div>}
