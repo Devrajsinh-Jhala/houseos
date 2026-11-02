@@ -6,7 +6,7 @@ export type Theme = "system" | "light" | "dark";
 export const THEME_KEY = "houseos:theme";
 
 /** Kept in sync with --paper in index.css, and with the boot script in index.html. */
-const PAPER = { light: "#f4f5f1", dark: "#12160f" };
+const PAPER = { light: "#f8f9f5", dark: "#141b15" };
 
 export function storedTheme(): Theme {
   try {

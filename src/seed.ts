@@ -1,4 +1,4 @@
-import { uid, type DayScope, type Item, type Kind } from "./core";
+import { uid, houseDay, type DayScope, type Item, type Kind } from "./core";
 
 // Starting point, not gospel. Every interval here is a guess about someone
 // else's household — edit them on the Manage screen as you learn your own.
@@ -22,7 +22,14 @@ function mk(
 }
 
 function routine(time: string, name: string, scope: DayScope, note?: string): Item {
-  return mk("routine", name, 1, { timeAnchor: time, dayScope: scope, note });
+  const offsets: Record<string, number> = { "Home — check what's due": 0, "Cook dinner": 30, "Kitchen reset — counter, sink, stove": 90, "Prep for tomorrow": 110, "Trash out": 140 };
+  const durations: Record<string, number> = { "Wake up": 5, "Breakfast, and pack lunch": 40, "Leave for office": 5, "Cook dinner": 45, "Fill water bottles": 5, "Home — check what's due": 10, "Prep for tomorrow": 15, "Trash out": 5, "Sleep": 1 };
+  return mk("routine", name, 1, { timeAnchor: time, dayScope: scope, note, durationMinutes: durations[name] ?? 15,
+    ...(name in offsets ? { scheduleAnchor: "arrival", arrivalOffset: offsets[name] } as const : {}) });
+}
+
+function weekly(name: string, days: number[], minutes: number, extra: Partial<Item> = {}): Item {
+  return mk("chore", name, 7, {scheduleMode:"weekly",scheduledDays:days,scheduledDate:houseDay(),durationMinutes:minutes,timeAnchor:"11:00",...extra});
 }
 
 export const SEED: Item[] = [
@@ -49,18 +56,20 @@ export const SEED: Item[] = [
   routine("22:00", "Kitchen reset", "weekend"),
 
   // ---- Chores ----------------------------------------------------------
-  mk("chore", "Sweep the floors", 2, { group: "Floors" }),
-  mk("chore", "Mop the floors", 3, { group: "Floors" }),
-  mk("chore", "Laundry", 4, { group: "Clothes" }),
-  mk("chore", "Iron shirts for the week", 7, { group: "Clothes" }),
+  weekly("Sweep the floors", [1,3,5], 10, { group: "Floors", scheduleAnchor:"arrival", arrivalOffset:10 }),
+  weekly("Mop the floors", [2,6], 15, { group: "Floors", timeAnchor:"10:30" }),
+  weekly("Laundry", [6], 20, { group: "Clothes", timeAnchor:"11:30", note:"Active time only; hang to dry after the cycle." }),
+  weekly("Iron shirts for the week", [0], 20, { group: "Clothes", timeAnchor:"17:00" }),
   mk("chore", "Change bedsheets and pillow covers", 14, { group: "Bedroom" }),
-  mk("chore", "Clean the bathroom", 7, { group: "Bathroom" }),
+  weekly("Clean the bathroom", [6], 25, { group: "Bathroom", timeAnchor:"12:00" }),
   mk("chore", "Clear out the fridge", 21, { group: "Kitchen", note: "Throw the science experiments" }),
   mk("chore", "Deep clean stove and chimney filter", 21, { group: "Kitchen" }),
   mk("chore", "Descale the kettle", 60, { group: "Kitchen" }),
   mk("chore", "Wash curtains", 90, { group: "Bedroom" }),
   mk("chore", "Water the plants", 3, { group: "Other" }),
   mk("chore", "Wipe down the fan blades", 45, { group: "Other" }),
+  mk("chore", "Clean washing machine drum and filter", 30, {group:"Maintenance",durationMinutes:20,note:"Check your appliance manual for the right method and frequency."}),
+  mk("chore", "Review appliance servicing and warranties", 90, {group:"Maintenance",durationMinutes:15,note:"Keep service contacts and warranty details in Home handbook."}),
 
   // ---- Restock: daily / dairy -----------------------------------------
   mk("restock", "Milk", 1, { group: "Daily", note: "Nandini toned, 500ml" }),
@@ -121,7 +130,6 @@ export const SEED: Item[] = [
 
   // ---- Fixed dates -----------------------------------------------------
   mk("fixed", "Rent", 0, { monthDay: 5, group: "Money" }),
-  mk("fixed", "Maid salary", 0, { monthDay: 1, group: "Money" }),
   mk("fixed", "Electricity bill", 0, { monthDay: 10, group: "Money" }),
   mk("fixed", "Internet bill", 0, { monthDay: 15, group: "Money" }),
   mk("fixed", "Phone recharge", 0, { monthDay: 22, group: "Money" }),

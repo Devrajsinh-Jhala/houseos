@@ -1,4 +1,7 @@
 import { dueLabel, fmtClock, isSnoozed, needsSetup, pressure, urgency, type Item } from "../core";
+import { hasAmount, money } from "../bills";
+import { scheduleLabel } from "../planner";
+import "../tasks.css";
 
 function Check() {
   return (
@@ -22,8 +25,10 @@ export function Row({ item, done, onToggle, onEdit, timeline, now = new Date() }
   const u = urgency(item, now);
   const unset = needsSetup(item);
   const snoozed = isSnoozed(item, now);
-  const showPressure = !timeline && item.kind !== "routine" && !unset;
+  const showPressure = !timeline && (item.kind === "chore" || item.kind === "restock") && item.scheduleMode !== "once" && !unset && !done;
   const fill = Math.min(pressure(item, now), 1.4) / 1.4;
+  const scheduled = item.kind === "chore" || item.kind === "routine";
+  const status = done ? (item.kind === "fixed" ? "Paid" : "Done") : dueLabel(item, now);
 
   return (
     <div className={`row${timeline ? " tl-row" : ""}${done ? " done" : ""}`}>
@@ -36,7 +41,7 @@ export function Row({ item, done, onToggle, onEdit, timeline, now = new Date() }
 
       <button
         className="tick"
-        aria-label={done ? `Undo ${item.name}` : `Mark ${item.name} done`}
+        aria-label={done ? `Undo ${item.name}` : `Mark ${item.name} ${item.kind === "fixed" ? "paid" : "done"}`}
         aria-pressed={done}
         onClick={() => onToggle(item)}
       >
@@ -49,6 +54,8 @@ export function Row({ item, done, onToggle, onEdit, timeline, now = new Date() }
         aria-label={onEdit ? `Edit ${item.name}` : item.name}
       >
         <div className="name">{item.name}</div>
+        {scheduled && <div className="meta house-row-meta"><span>{scheduleLabel(item)}</span>{item.durationMinutes != null && <span>· {item.durationMinutes} min</span>}{item.priority === "high" && <span className="house-row-priority">High priority</span>}{item.scheduleAnchor === "arrival" && <span>· Around arrival</span>}</div>}
+        {item.kind === "fixed" && <div className="meta">{scheduleLabel(item)}{item.group ? ` · ${item.group}` : ""}{!hasAmount(item) ? " · Add amount" : ""}</div>}
         {item.note && <div className="meta">{item.note}</div>}
         {showPressure && (
           <div className={`pressure ${u}`}>
@@ -58,13 +65,14 @@ export function Row({ item, done, onToggle, onEdit, timeline, now = new Date() }
       </button>
 
       {!timeline && (
-        <span className={`when ${u}`}>
+        <span className={`when ${done ? "ok" : u}${item.kind === "fixed" ? " house-row-bill" : ""}`}>
+          {item.kind === "fixed" && hasAmount(item) && <strong>{money(item.amount!)}</strong>}
           {snoozed && (
             <span className="snoozed" aria-label="snoozed">
               ⏾{" "}
             </span>
           )}
-          {dueLabel(item, now)}
+          <span>{status}</span>
         </span>
       )}
     </div>

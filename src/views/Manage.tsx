@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { exportBackup, getMeta, importBackup, setMeta } from "../db";
-import { DAY_MS, fmtClock, type Item, type Kind } from "../core";
+import { DAY_MS, type Item, type Kind } from "../core";
+import { scheduleLabel, type HouseholdSettings } from "../planner";
 import { buildCalendar } from "../calendar";
 import { applyTheme, storedTheme, type Theme } from "../theme";
+import { registerOffline, useOfflineStatus } from "../offline";
 
 const KINDS: { key: Kind; label: string }[] = [
   { key: "routine", label: "Routine" },
@@ -32,14 +34,20 @@ function download(blob: Blob, filename: string) {
 
 interface Props {
   items: Item[];
+  settings: HouseholdSettings;
+  onSettingsChange: (settings: HouseholdSettings) => Promise<void>;
   onEdit: (item: Item) => void;
   onAdd: () => void;
-  onReload: () => void;
+  onReload: () => void | Promise<void>;
   toast: (msg: string) => void;
 }
 
-export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
-  const [kind, setKind] = useState<Kind>("restock");
+export function Manage({ items, settings, onSettingsChange, onEdit, onAdd, onReload, toast }: Props) {
+  const offlineStatus = useOfflineStatus();
+  const [kind, setKind] = useState<Kind>("chore");
+  const [draftSettings, setDraftSettings] = useState(settings);
+  const [saving, setSaving] = useState(false);
+  const [restore, setRestore] = useState<{name: string; data: unknown} | null>(null);
   const [query, setQuery] = useState("");
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(storedTheme);
@@ -48,6 +56,15 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
   useEffect(() => {
     void getMeta<string>(BACKUP_KEY).then((v) => setLastBackup(v ?? null));
   }, []);
+  useEffect(() => setDraftSettings(settings), [settings]);
+
+  const saveSettings = async () => {
+    if (!draftSettings.homeName.trim()) return;
+    setSaving(true);
+    try { await onSettingsChange({...draftSettings, homeName:draftSettings.homeName.trim()}); toast("Your daily rhythm is saved"); }
+    catch { toast("Settings couldn't be saved. Please try again."); }
+    finally { setSaving(false); }
+  };
 
   const q = query.trim().toLowerCase();
   const list = items
@@ -71,6 +88,7 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
   const backupOverdue = backupAgeDays === null || backupAgeDays >= NAG_AFTER_DAYS;
 
   const doExport = async () => {
+    try {
     const data = await exportBackup();
     download(
       new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
@@ -79,10 +97,11 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
     await setMeta(BACKUP_KEY, data.exportedAt);
     setLastBackup(data.exportedAt);
     toast("Backup saved");
+    } catch { toast("Backup couldn't be created. Please try again."); }
   };
 
   const doCalendar = () => {
-    const { ics, count } = buildCalendar(items);
+    const { ics, count } = buildCalendar(items, new Date(), settings);
     if (!count) {
       toast("No routine or fixed dates to export");
       return;
@@ -94,7 +113,7 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
   const doImport = async (file: File) => {
     try {
       const res = await importBackup(JSON.parse(await file.text()));
-      onReload();
+      await onReload();
       toast(
         res.skipped
           ? `Restored ${res.items} items, skipped ${res.skipped} bad records`
@@ -107,6 +126,20 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
 
   return (
     <>
+      <form className="settings-card" onSubmit={e=>{e.preventDefault();void saveSettings();}}>
+        <h2>Your home, your rhythm</h2>
+        <p className="note">Set the shape of your day. Tasks set to “after arriving home” follow these times automatically.</p>
+        <div className="settings-grid">
+          <div className="field"><label htmlFor="home-name">Home name</label><input id="home-name" required maxLength={60} value={draftSettings.homeName} onChange={e=>setDraftSettings(d=>({...d,homeName:e.target.value}))}/></div>
+          <div className="field"><label htmlFor="home-arrival">Weekday arrival time</label><input id="home-arrival" type="time" required value={draftSettings.arrivalTime} onChange={e=>setDraftSettings(d=>({...d,arrivalTime:e.target.value}))}/></div>
+          <div className="field"><label htmlFor="weekend-arrival">Weekend home time</label><input id="weekend-arrival" type="time" required value={draftSettings.weekendArrivalTime} onChange={e=>setDraftSettings(d=>({...d,weekendArrivalTime:e.target.value}))}/></div>
+          <div className="field"><label htmlFor="home-sleep">Bedtime</label><input id="home-sleep" type="time" required value={draftSettings.sleepTime} onChange={e=>setDraftSettings(d=>({...d,sleepTime:e.target.value}))}/></div>
+          <div className="field"><label htmlFor="home-budget">Daily home time (minutes)</label><input id="home-budget" type="number" required min={5} max={600} value={draftSettings.dailyBudgetMinutes} onChange={e=>setDraftSettings(d=>({...d,dailyBudgetMinutes:Number(e.target.value)}))}/></div>
+        </div>
+        <p className="hint">The planner flags overlapping tasks, chores over your time budget, and tasks that run past bedtime.</p>
+        <div className="btn-row"><button className="btn" disabled={saving} type="submit">{saving?"Saving…":"Save my rhythm"}</button></div>
+      </form>
+      <div className="section"><h2>All tasks & routines</h2><span className="count">{items.length} saved</span></div>
       <div className="btn-row">
         <button className="btn" onClick={onAdd}>
           Add an item
@@ -155,17 +188,7 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
               {item.name}
             </div>
             <div className="meta">
-              {item.kind === "routine"
-                ? `${fmtClock(item.timeAnchor)} · ${
-                    item.dayScope === "any"
-                      ? "every day"
-                      : item.dayScope === "weekday"
-                      ? "weekdays"
-                      : "weekends"
-                  }`
-                : item.kind === "fixed"
-                ? `day ${item.monthDay} of the month`
-                : `every ${item.intervalDays} days${item.group ? ` · ${item.group}` : ""}`}
+              {scheduleLabel(item)}{item.group ? ` · ${item.group}` : ""}{!item.active?" · Paused":""}
             </div>
           </div>
         </button>
@@ -194,11 +217,16 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
       </p>
 
       <div className="section">
+        <h2>Offline access</h2>
+      </div>
+      <p className="note" role="status">{offlineStatus==="ready"?"Ready for offline use. Your app files and household records are saved on this device.":offlineStatus==="preparing"?"Preparing your offline files. Keep this page open until setup is complete.":offlineStatus==="development"?"Offline installation is available in the production build. This is the development preview.":"Offline setup is unavailable in this browser right now. Reconnect and try again, or open HouseOS in your phone's browser."}</p>
+      {offlineStatus==="unavailable"&&<button className="btn ghost small" onClick={registerOffline}>Retry offline setup</button>}
+      <div className="section">
         <h2>Backup</h2>
       </div>
       <p className={backupOverdue ? "note warn" : "note"}>
         {backupAgeDays === null
-          ? "You haven't exported a backup yet. Browser storage is durable but not guaranteed — one file in your cloud drive is the difference between a wipe costing you nothing and costing you six months of dates."
+          ? "Keep a copy of your home data. A backup includes your tasks, completion history, inventory, meals, handbook, and daily rhythm."
           : backupOverdue
           ? `Last backup was ${backupAgeDays} days ago. Worth doing another.`
           : `Last backup ${backupAgeDays === 0 ? "today" : `${backupAgeDays} days ago`}.`}
@@ -218,19 +246,17 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
         accept="application/json"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) void doImport(f);
+          if (f) void f.text().then(text=>setRestore({name:f.name,data:JSON.parse(text)})).catch(()=>toast("That file isn't a readable JSON backup."));
           e.target.value = "";
         }}
       />
+      {restore && <div className="restore-review" role="alert"><strong>Restore {restore.name}?</strong><p className="note">This replaces your tasks and the household records included in this file. Export a backup first if you want to keep the current version.</p><div className="btn-row"><button className="btn danger" onClick={()=>{const file=new File([JSON.stringify(restore.data)],restore.name);setRestore(null);void doImport(file);}}>Replace with this backup</button><button className="btn ghost" onClick={()=>setRestore(null)}>Cancel</button></div></div>}
 
       <div className="section">
         <h2>Reminders</h2>
       </div>
       <p className="note">
-        HouseOS has no server and no account, so it can't send you a
-        notification by itself — there is nowhere for one to be sent from. What
-        it can do is hand your routine and fixed dates to the calendar app on
-        your phone, which already does alerts properly, offline and for free.
+        Download your schedule to your calendar for reminders, including custom weekdays and tasks timed around your arrival. HouseOS itself does not send notifications while closed.
       </p>
       <div className="btn-row">
         <button className="btn ghost" onClick={doCalendar}>
@@ -238,10 +264,7 @@ export function Manage({ items, onEdit, onAdd, onReload, toast }: Props) {
         </button>
       </div>
       <p className="hint">
-        Open the file on your phone and it offers to add the events. Re-export
-        after you change your routine times — the file is a copy, not a link.
-        Chores and restocking stay out of it on purpose: their dates move every
-        time you tick one off, and a repeating calendar event can't follow that.
+        Import the file into your calendar. It is a snapshot: re-export after changing arrival times, schedules, or completion dates. Interval chores export their next occurrence. Legacy restock reminders stay in HouseOS. Fixed-date tasks tied to arrival export the next 12 months.
       </p>
     </>
   );

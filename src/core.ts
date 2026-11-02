@@ -12,6 +12,16 @@ export interface Item {
   /** "06:45" — routine only. Orders the day and drives push timing. */
   timeAnchor?: string;
   dayScope: DayScope;
+  /** Optional explicit schedule. Missing fields preserve older records. */
+  scheduleMode?: "interval" | "weekly" | "once";
+  scheduledDays?: number[];
+  scheduledDate?: string;
+  scheduleAnchor?: "clock" | "arrival";
+  arrivalOffset?: number;
+  durationMinutes?: number;
+  priority?: "low" | "normal" | "high";
+  /** Optional monthly bill amount, in rupees. */
+  amount?: number;
   /** Shopping trip for restock, area for chores. */
   group?: string;
   /** Brand, quantity, the thing you always forget at the shop. */
@@ -87,6 +97,7 @@ export function doneToday(item: Item, now: Date = new Date()): boolean {
 export function needsSetup(item: Item): boolean {
   if (!item.active) return false;
   if (item.kind !== "chore" && item.kind !== "restock") return false;
+  if (item.scheduleMode) return false;
   return !item.lastDone;
 }
 
@@ -108,7 +119,26 @@ function anchoredDay(item: Item, year: number, monthIndex: number): number {
 }
 
 function rawDueDate(item: Item, now: Date): Date {
+  const currentHouseDay = new Date(houseDay(now) + "T12:00:00");
+  if (item.scheduleMode === "once" && item.scheduledDate) {
+    return new Date(item.scheduledDate + "T12:00:00");
+  }
+  if (item.scheduleMode === "weekly" && item.scheduledDays?.length) {
+    const start = item.scheduledDate ?? houseDay(new Date(item.created));
+    const first = item.lastDone ? houseDay(new Date(item.lastDone)) : start;
+    const d = new Date(first + "T12:00:00");
+    if (item.lastDone) d.setDate(d.getDate() + 1);
+    if (toISODate(d) < start) d.setTime(new Date(start + "T12:00:00").getTime());
+    for (let n = 0; n < 7; n++) {
+      if (item.scheduledDays.includes(d.getDay())) return d;
+      d.setDate(d.getDate() + 1);
+    }
+  }
+  if (item.scheduleMode === "interval" && !item.lastDone) {
+    return new Date((item.scheduledDate ?? houseDay(new Date(item.created))) + "T12:00:00");
+  }
   if (item.kind === "fixed") {
+    // Bills follow the civil month used by the monthly payment checklist.
     const d = new Date(now.getFullYear(), now.getMonth(), 1, 12);
     d.setDate(anchoredDay(item, d.getFullYear(), d.getMonth()));
     if (item.lastDone) {
@@ -121,8 +151,8 @@ function rawDueDate(item: Item, now: Date): Date {
     }
     return d;
   }
-  if (!item.lastDone) return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-  const base = new Date(item.lastDone);
+  if (!item.lastDone) return currentHouseDay;
+  const base = new Date(houseDay(new Date(item.lastDone)) + "T12:00:00");
   const d = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12);
   d.setDate(d.getDate() + item.intervalDays);
   return d;
@@ -140,13 +170,15 @@ export function dueDate(item: Item, now: Date = new Date()): Date {
 
 /** Whole days until due. Negative means overdue. */
 export function daysUntilDue(item: Item, now: Date = new Date()): number {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  const today = item.kind === "fixed" && !item.scheduleMode
+    ? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12)
+    : new Date(houseDay(now) + "T12:00:00");
   return Math.round((dueDate(item, now).getTime() - today.getTime()) / DAY_MS);
 }
 
 export function isSnoozed(item: Item, now: Date = new Date()): boolean {
   if (!item.snoozedUntil) return false;
-  return new Date(item.snoozedUntil + "T12:00:00").getTime() > now.getTime();
+  return item.snoozedUntil > houseDay(now);
 }
 
 /**
@@ -171,6 +203,7 @@ export function urgency(item: Item, now: Date = new Date()): Urgency {
 }
 
 export function dueLabel(item: Item, now: Date = new Date()): string {
+  if (item.scheduleMode === "once" && item.lastDone) return "completed";
   if (needsSetup(item)) return "not set";
   const d = daysUntilDue(item, now);
   if (d < -1) return `${Math.abs(d)} days late`;
@@ -185,6 +218,7 @@ export function dueLabel(item: Item, now: Date = new Date()): string {
 /** Drives the nav dots. Never-ticked items are not nagging material. */
 export function needsAttention(item: Item, now: Date = new Date()): boolean {
   if (!item.active) return false;
+  if (item.scheduleMode === "once" && item.lastDone) return false;
   if (item.kind === "routine") return false;
   if (needsSetup(item)) return false;
   return daysUntilDue(item, now) <= 1;
@@ -231,7 +265,7 @@ export function fmtClock(t?: string): string {
 
 /** Gaps in days between consecutive completions, oldest first. */
 export function gapsBetween(events: DoneEvent[]): number[] {
-  const sorted = [...events].sort((a, b) => a.doneAt.localeCompare(b.doneAt));
+  const sorted = [...events].sort((a, b) => Date.parse(a.doneAt) - Date.parse(b.doneAt));
   const gaps: number[] = [];
   for (let i = 1; i < sorted.length; i++) {
     const g =
@@ -265,6 +299,7 @@ export function observedInterval(events: DoneEvent[]): Observed | null {
 
 /** Only worth surfacing if it would actually change the number. */
 export function suggestionFor(item: Item, events: DoneEvent[]): Observed | null {
+  if (item.scheduleMode === "weekly" || item.scheduleMode === "once") return null;
   if (item.kind === "routine" || item.kind === "fixed") return null;
   const obs = observedInterval(events);
   if (!obs) return null;

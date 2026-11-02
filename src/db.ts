@@ -1,10 +1,24 @@
 import { openDB, type IDBPDatabase } from "idb";
 import { uid, type DoneEvent, type Item } from "./core";
+import { validStockItem, type StockItem } from "./inventory";
+import { validMeal, type MealPlan } from "./meals";
+import { validHomeContact, type HomeContact } from "./homeGuide";
+import { DEFAULT_SETTINGS, type HouseholdSettings } from "./planner";
+import { validEvent, validItem, validSettings } from "./validation";
 
 const NAME = "houseos";
 const VERSION = 1;
+const BACKUP_VERSION = 2;
 
 let dbp: Promise<IDBPDatabase> | null = null;
+
+async function rollback(tx: { abort: () => void; done: Promise<unknown> }, error: unknown): Promise<never> {
+  // Synchronous failures (for example a value that cannot be cloned) do not
+  // automatically abort IndexedDB. Explicitly abort before earlier writes commit.
+  try { tx.abort(); } catch { /* A failed request may already have aborted it. */ }
+  await tx.done.catch(() => {});
+  throw error;
+}
 
 function db() {
   if (!dbp) {
@@ -55,17 +69,19 @@ export async function eventsForItem(itemId: string): Promise<DoneEvent[]> {
 
 /** Mark done now. Returns the updated item so callers can patch state. */
 export async function complete(item: Item, when: Date = new Date()): Promise<Item> {
-  const updated = { ...item, lastDone: when.toISOString() };
-  // Doing the thing ends any snooze on it.
-  delete updated.snoozedUntil;
   const d = await db();
   const tx = d.transaction(["items", "events"], "readwrite");
-  await tx.objectStore("items").put(updated);
-  await tx
-    .objectStore("events")
-    .put({ id: uid(), itemId: item.id, doneAt: updated.lastDone } as DoneEvent);
-  await tx.done;
-  return updated;
+  try {
+    const current: Item = await tx.objectStore("items").get(item.id) ?? item;
+    const updated = { ...current, lastDone: when.toISOString() };
+    delete updated.snoozedUntil;
+    await tx.objectStore("items").put(updated);
+    await tx
+      .objectStore("events")
+      .put({ id: uid(), itemId: item.id, doneAt: updated.lastDone } as DoneEvent);
+    await tx.done;
+    return updated;
+  } catch (error) { return rollback(tx, error); }
 }
 
 /**
@@ -77,29 +93,40 @@ export async function completeMany(items: Item[], when: Date = new Date()): Prom
   const stamp = when.toISOString();
   const d = await db();
   const tx = d.transaction(["items", "events"], "readwrite");
-  const updated: Item[] = [];
-  for (const item of items) {
-    const next = { ...item, lastDone: stamp };
-    delete next.snoozedUntil;
-    await tx.objectStore("items").put(next);
-    await tx.objectStore("events").put({ id: uid(), itemId: item.id, doneAt: stamp } as DoneEvent);
-    updated.push(next);
-  }
-  await tx.done;
-  return updated;
+  try {
+    const updated: Item[] = [];
+    const unique = new Map(items.map((item) => [item.id, item]));
+    for (const item of unique.values()) {
+      const current: Item = await tx.objectStore("items").get(item.id) ?? item;
+      const next = { ...current, lastDone: stamp };
+      delete next.snoozedUntil;
+      await tx.objectStore("items").put(next);
+      await tx.objectStore("events").put({ id: uid(), itemId: item.id, doneAt: stamp } as DoneEvent);
+      updated.push(next);
+    }
+    await tx.done;
+    return updated;
+  } catch (error) { return rollback(tx, error); }
 }
 
 /** Undo the most recent completion of an item. */
 export async function uncomplete(item: Item): Promise<Item> {
   const d = await db();
-  const events: DoneEvent[] = await d.getAllFromIndex("events", "byItem", item.id);
-  events.sort((a, b) => a.doneAt.localeCompare(b.doneAt));
-  const last = events.pop();
-  if (last) await d.delete("events", last.id);
-  const prev = events.length ? events[events.length - 1].doneAt : undefined;
-  const updated = { ...item, lastDone: prev };
-  await d.put("items", updated);
-  return updated;
+  const tx = d.transaction(["items", "events"], "readwrite");
+  try {
+    const current: Item = await tx.objectStore("items").get(item.id) ?? item;
+    const events: DoneEvent[] = await tx.objectStore("events").index("byItem").getAll(item.id);
+    events.sort((a, b) => Date.parse(a.doneAt) - Date.parse(b.doneAt));
+    const last = events.pop();
+    if (last) await tx.objectStore("events").delete(last.id);
+    // Earlier recurring completions remain useful history after conversion,
+    // but they must not make a one-off task stay completed after undo.
+    const prev = current.scheduleMode === "once" ? undefined : events.at(-1)?.doneAt;
+    const updated = { ...current, lastDone: prev };
+    await tx.objectStore("items").put(updated);
+    await tx.done;
+    return updated;
+  } catch (error) { return rollback(tx, error); }
 }
 
 /** Push an item out to a given day without pretending it was done. */
@@ -123,52 +150,29 @@ export interface Backup {
   exportedAt: string;
   items: Item[];
   events: DoneEvent[];
+  metadata?: BackupMetadata;
+}
+
+export interface BackupMetadata {
+  inventory?: StockItem[];
+  meals?: MealPlan[];
+  contacts?: HomeContact[];
+  householdSettings?: HouseholdSettings;
 }
 
 export async function exportBackup(): Promise<Backup> {
+  const d = await db();
+  const tx = d.transaction(["items", "events", "meta"], "readonly");
+  const [items, events, inventory, meals, contacts, settings] = await Promise.all([
+    tx.objectStore("items").getAll(), tx.objectStore("events").getAll(),
+    tx.objectStore("meta").get("inventory"), tx.objectStore("meta").get("meals"),
+    tx.objectStore("meta").get("contacts"), tx.objectStore("meta").get("householdSettings"),
+  ]);
+  await tx.done;
   return {
-    app: "houseos",
-    version: VERSION,
-    exportedAt: new Date().toISOString(),
-    items: await allItems(),
-    events: await allEvents(),
+    app: "houseos", version: BACKUP_VERSION, exportedAt: new Date().toISOString(), items, events,
+    metadata: { inventory: inventory ?? [], meals: meals ?? [], contacts: contacts ?? [], householdSettings: settings ?? { ...DEFAULT_SETTINGS } },
   };
-}
-
-const KINDS = new Set(["routine", "chore", "restock", "fixed"]);
-const SCOPES = new Set(["any", "weekday", "weekend"]);
-
-/**
- * A backup file is the one input this app takes from the outside world, and a
- * malformed one used to land straight in IndexedDB and crash the next render
- * with no way back. Anything that isn't a well-formed item is dropped.
- */
-function validItem(raw: unknown): raw is Item {
-  if (!raw || typeof raw !== "object") return false;
-  const i = raw as Record<string, unknown>;
-  return (
-    typeof i.id === "string" &&
-    i.id.length > 0 &&
-    typeof i.name === "string" &&
-    typeof i.kind === "string" &&
-    KINDS.has(i.kind) &&
-    typeof i.intervalDays === "number" &&
-    Number.isFinite(i.intervalDays) &&
-    typeof i.dayScope === "string" &&
-    SCOPES.has(i.dayScope) &&
-    typeof i.active === "boolean"
-  );
-}
-
-function validEvent(raw: unknown): raw is DoneEvent {
-  if (!raw || typeof raw !== "object") return false;
-  const e = raw as Record<string, unknown>;
-  return (
-    typeof e.id === "string" &&
-    typeof e.itemId === "string" &&
-    typeof e.doneAt === "string" &&
-    !Number.isNaN(Date.parse(e.doneAt))
-  );
 }
 
 export interface ImportResult {
@@ -179,32 +183,67 @@ export interface ImportResult {
 }
 
 export async function importBackup(raw: unknown): Promise<ImportResult> {
-  const data = raw as Backup;
-  if (!data || data.app !== "houseos" || !Array.isArray(data.items)) {
+  const data = raw as Record<string, unknown> | null;
+  if (!data || typeof data !== "object" || data.app !== "houseos" || !Array.isArray(data.items)) {
     throw new Error("That file isn't a HouseOS backup.");
   }
+  if (data.version !== 1 && data.version !== BACKUP_VERSION) {
+    throw new Error("This backup version isn't supported. Update HouseOS before restoring it.");
+  }
+  if (!Array.isArray(data.events)) throw new Error("This backup has an invalid completion history.");
 
-  const items = data.items.filter(validItem);
-  const rawEvents = Array.isArray(data.events) ? data.events : [];
+  let skipped = 0;
+  function validated<T extends { id: string }>(input: unknown[], check: (value: unknown) => value is T, label: string, identity?: (value: T) => string): T[] {
+    const ids = new Set<string>();
+    const identities = new Set<string>();
+    const result = input.filter((value): value is T => {
+      if (!check(value) || ids.has(value.id) || (identity && identities.has(identity(value)))) { skipped++; return false; }
+      ids.add(value.id);
+      if (identity) identities.add(identity(value));
+      return true;
+    });
+    if (input.length && !result.length) throw new Error(`This backup has no usable ${label}. Your current data has not been changed.`);
+    return result;
+  }
+
+  const items = validated(data.items, validItem, "household tasks");
+  const rawEvents = data.events;
   const ids = new Set(items.map((i) => i.id));
-  // Events pointing at items that didn't survive would skew nothing but bloat
-  // every future backup, so they go too.
-  const events = rawEvents.filter((e) => validEvent(e) && ids.has(e.itemId));
-  const skipped = data.items.length - items.length + (rawEvents.length - events.length);
-
-  if (!items.length) {
-    throw new Error("That backup has no usable items in it.");
+  const seenEvents = new Set<string>();
+  const events = rawEvents.filter((event): event is DoneEvent => {
+    if (!validEvent(event) || !ids.has(event.itemId) || seenEvents.has(event.id)) { skipped++; return false; }
+    seenEvents.add(event.id);
+    return true;
+  });
+  const metadata: BackupMetadata = {};
+  if (data.metadata !== undefined) {
+    if (!data.metadata || typeof data.metadata !== "object" || Array.isArray(data.metadata)) throw new Error("This backup has invalid household data.");
+    const meta = data.metadata as Record<string, unknown>;
+    for (const key of ["inventory", "meals", "contacts"] as const) {
+      if (meta[key] !== undefined && !Array.isArray(meta[key])) throw new Error(`This backup has invalid ${key}.`);
+    }
+    if (Array.isArray(meta.inventory)) metadata.inventory = validated(meta.inventory, validStockItem, "inventory records");
+    if (Array.isArray(meta.meals)) metadata.meals = validated(meta.meals, validMeal, "meal plans", (meal) => `${meal.date}:${meal.slot}`);
+    if (Array.isArray(meta.contacts)) metadata.contacts = validated(meta.contacts, validHomeContact, "home records");
+    if (meta.householdSettings !== undefined) {
+      if (!validSettings(meta.householdSettings)) throw new Error("This backup has invalid home settings.");
+      metadata.householdSettings = meta.householdSettings;
+    }
   }
 
   const d = await db();
-  const tx = d.transaction(["items", "events"], "readwrite");
-  await tx.objectStore("items").clear();
-  await tx.objectStore("events").clear();
-  for (const i of items) await tx.objectStore("items").put(i);
-  for (const e of events) await tx.objectStore("events").put(e);
-  await tx.done;
+  const tx = d.transaction(["items", "events", "meta"], "readwrite");
+  try {
+    await tx.objectStore("items").clear();
+    await tx.objectStore("events").clear();
+    for (const i of items) await tx.objectStore("items").put(i);
+    for (const e of events) await tx.objectStore("events").put(e);
+    for (const [key, value] of Object.entries(metadata)) await tx.objectStore("meta").put(value, key);
+    await tx.objectStore("meta").put(true, "initialized");
+    await tx.done;
 
-  return { items: items.length, events: events.length, skipped };
+    return { items: items.length, events: events.length, skipped };
+  } catch (error) { return rollback(tx, error); }
 }
 
 export async function seedIfEmpty(seed: Item[]): Promise<void> {
@@ -212,9 +251,12 @@ export async function seedIfEmpty(seed: Item[]): Promise<void> {
   // Count and seed inside one readwrite transaction. StrictMode mounts the app
   // twice in dev; with a separate read first, both mounts saw an empty store
   // and both seeded, leaving every item in the house duplicated.
-  const tx = d.transaction("items", "readwrite");
-  if ((await tx.store.count()) === 0) {
-    for (const i of seed) await tx.store.put(i);
+  const tx = d.transaction(["items", "meta"], "readwrite");
+  if (!(await tx.objectStore("meta").get("initialized"))) {
+    if ((await tx.objectStore("items").count()) === 0) {
+      for (const i of seed) await tx.objectStore("items").put(i);
+    }
+    await tx.objectStore("meta").put(true, "initialized");
   }
   await tx.done;
 }

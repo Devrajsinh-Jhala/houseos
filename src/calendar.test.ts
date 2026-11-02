@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCalendar } from "./calendar";
 import type { Item } from "./core";
+import { DEFAULT_SETTINGS } from "./planner";
 
 function item(over: Partial<Item> = {}): Item {
   return {
@@ -18,6 +19,60 @@ function item(over: Partial<Item> = {}): Item {
 
 /** 2025-03-10 is a Monday. */
 const MONDAY = new Date(2025, 2, 10, 8, 0);
+
+describe("custom schedule calendar export", () => {
+  it("writes only the selected weekdays and the task's duration", () => {
+    const {ics} = buildCalendar([item({kind:"chore",scheduleMode:"weekly",scheduledDays:[1,4],durationMinutes:35,scheduledDate:"2025-03-10"})],MONDAY);
+    expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=MO,TH");
+    expect(ics).toContain("DURATION:PT35M");
+  });
+  it("exports a one-off without inventing a repeating rule", () => {
+    const {ics,count} = buildCalendar([item({kind:"chore",scheduleMode:"once",scheduledDate:"2025-03-12"})],MONDAY);
+    expect(count).toBe(1);
+    expect(ics).toContain("DTSTART:20250312T064500");
+    expect(ics).not.toContain("RRULE");
+  });
+  it("does not export a completed one-off", () => {
+    expect(buildCalendar([item({scheduleMode:"once",scheduledDate:"2025-03-10",lastDone:MONDAY.toISOString()})],MONDAY).count).toBe(0);
+  });
+  it("uses separate weekday and weekend times for arrival-relative routines", () => {
+    const {ics,count} = buildCalendar([item({scheduleAnchor:"arrival",arrivalOffset:30})],MONDAY,DEFAULT_SETTINGS);
+    expect(count).toBe(2);
+    expect(ics).toContain("DTSTART:20250310T193000");
+    expect(ics).toContain("DTSTART:20250315T103000");
+    expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=SA,SU");
+  });
+  it("shifts an after-midnight weekly task to the next civil weekday", () => {
+    const {ics} = buildCalendar([item({scheduleMode:"weekly",scheduledDays:[1],scheduledDate:"2025-03-10",timeAnchor:"01:00"})],MONDAY);
+    expect(ics).toContain("DTSTART:20250311T010000");
+    expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=TU");
+  });
+  it("exports a countdown's next occurrence as a snapshot", () => {
+    const {ics} = buildCalendar([item({kind:"chore",scheduleMode:"interval",intervalDays:3,lastDone:new Date(2025,2,10,1).toISOString()})],MONDAY);
+    expect(ics).toContain("DTSTART:20250312T064500");
+    expect(ics).not.toContain("RRULE");
+  });
+  it("includes a snoozed weekly occurrence on a different weekday", () => {
+    const {ics} = buildCalendar([item({scheduleMode:"weekly",scheduledDays:[1],scheduledDate:"2025-03-10",snoozedUntil:"2025-03-12"})],MONDAY);
+    expect(ics).toContain("DTSTART:20250312T064500");
+    expect(ics).toContain("DTSTART:20250317T064500");
+  });
+  it("keeps this month's arrival-relative bill if its evening time is still ahead", () => {
+    const {ics} = buildCalendar([item({kind:"fixed",monthDay:10,scheduleAnchor:"arrival",arrivalOffset:0})],new Date(2025,2,10,12),DEFAULT_SETTINGS);
+    expect(ics).toContain("DTSTART:20250310T190000");
+  });
+  it("starts a paid bill in the next month even if this month's due date is ahead", () => {
+    const {ics} = buildCalendar([item({kind:"fixed",monthDay:20,lastDone:MONDAY.toISOString(),timeAnchor:undefined})],MONDAY);
+    expect(ics).toContain("DTSTART:20250420T090000");
+    expect(ics).not.toContain("DTSTART:20250320T090000");
+  });
+  it("preserves the house weekday for legacy post-midnight routines", () => {
+    const {ics} = buildCalendar([item({dayScope:"weekday",timeAnchor:"01:00"})],MONDAY);
+    expect(ics).toContain("DTSTART:20250311T010000");
+    expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA");
+  });
+});
 
 function lines(ics: string): string[] {
   return ics.split("\r\n");

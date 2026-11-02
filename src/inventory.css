@@ -1,0 +1,93 @@
+.inventory-view { padding-bottom: 24px; }
+.stock-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 28px; }
+.stock-stat { background: var(--field-bg); border: 1px solid var(--rule); border-radius: 14px; padding: 20px; text-align: left; min-width: 0; }
+.stock-stat > span { display: block; font-size: 10px; color: var(--muted); letter-spacing: .09em; font-weight: 600; }
+.stock-stat strong { display: block; margin-top: 9px; font-size: 29px; line-height: 1.2; font-family: var(--display); font-weight: 600; }
+.stock-stat small { font-family: var(--body); color: var(--muted); font-size: 12px; font-weight: 400; }
+.stock-amber { color: var(--soon); }
+.stock-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.stock-segment { display: flex; padding: 4px; border: 1px solid var(--rule); background: var(--paper-2); border-radius: 10px; gap: 4px; }
+.stock-segment button { display: flex; align-items: center; gap: 7px; padding: 9px 13px; border-radius: 7px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.stock-segment button[aria-pressed="true"] { background: var(--field-bg); color: var(--ink); box-shadow: 0 1px 4px #00000009; font-weight: 600; }
+.stock-segment button span { background: var(--primary-soft); color: var(--primary); border-radius: 5px; padding: 0 5px; font-size: 10px; min-width: 17px; text-align: center; }
+.stock-segment svg { width: 16px; height: 16px; }
+.stock-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; margin-bottom: 14px; }
+.stock-search { display: flex; align-items: center; gap: 10px; border: 1px solid var(--rule); border-radius: 9px; background: var(--field-bg); padding: 0 12px; color: var(--muted); min-width: 0; }
+.stock-search input { width: 100%; min-width: 0; background: transparent; border: 0; height: 44px; font-size: 13px; }
+.stock-filters select { height: 44px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--rule); background: var(--field-bg); font-size: 13px; max-width: 180px; }
+.stock-filter-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 19px; }
+.stock-filter-chips .chip { font-size: 11px; padding: 6px 11px; }
+.stock-low-banner { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 15px 18px; margin: 18px 0; border: 1px solid var(--rule); border-left: 3px solid var(--soon); border-radius: 10px; background: var(--field-bg); }
+.stock-low-banner strong { font-size: 13px; font-weight: 600; }
+.stock-low-banner p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.stock-low-banner .btn { flex-shrink: 0; }
+.stock-explainer { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 16px 0; }
+.stock-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.stock-card { background: var(--field-bg); border: 1px solid var(--rule); border-radius: 14px; padding: 19px; min-width: 0; display: flex; flex-direction: column; }
+.stock-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.stock-category { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.stock-edit { color: var(--muted); font-size: 11px; padding: 5px 0 5px 8px; }
+.stock-edit:hover { color: var(--primary); }
+.stock-card h3 { margin: 8px 0 15px; font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.3; overflow-wrap: anywhere; }
+.stock-quantity { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.stock-quantity strong { font-size: 31px; font-weight: 600; font-family: var(--display); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stock-quantity > span { font-size: 12px; color: var(--muted); }
+.stock-quantity .stock-badge { margin-left: auto; border-radius: 5px; padding: 4px 7px; color: var(--primary); background: var(--primary-soft); font-size: 9px; font-weight: 500; align-self: center; }
+.stock-quantity .stock-badge.warning { color: var(--soon); background: color-mix(in srgb, var(--soon) 10%, transparent); }
+.stock-level { height: 4px; border-radius: 3px; overflow: hidden; background: var(--paper-2); margin-top: 15px; }
+.stock-level i { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
+.stock-card.is-low .stock-level i { background: var(--soon); }
+.stock-target { margin: 7px 0 0; color: var(--muted); font-size: 10px; }
+.stock-expiry { font-size: 11px; color: var(--muted); margin: 12px 0 0; }
+.stock-expiry.soon { color: var(--soon); }
+.stock-expiry.expired { color: var(--over); }
+.stock-item-note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 9px 0 0; overflow-wrap: anywhere; }
+.stock-card-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 17px; margin-top: auto; }
+.stock-stepper { display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; }
+.stock-stepper button { width: 32px; height: 32px; display: grid; place-items: center; font-size: 18px; }
+.stock-stepper span { font-size: 9px; color: var(--muted); padding: 0 4px; }
+.stock-stepper button:hover { background: var(--paper-2); }
+.stock-list-button { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); padding: 7px 0; }
+.stock-list-button svg { width: 15px; height: 15px; }
+.stock-list-button.queued { color: var(--primary); }
+.stock-text-button { font-size: 12px; color: var(--muted); padding: 8px 5px; }
+.inventory-view button:disabled { opacity: .45; cursor: default; }
+.stock-empty { text-align: center; padding: 55px 18px 35px; }
+.stock-empty-icon { color: var(--primary); display: grid; place-items: center; border-radius: 16px; background: var(--primary-soft); width: 59px; height: 59px; margin: 0 auto 18px; }
+.stock-empty-icon svg { width: 28px; height: 28px; }
+.stock-empty h3 { font-family: var(--display); font-size: 23px; line-height: 1.25; font-weight: 600; margin: 0 0 10px; }
+.stock-empty p { color: var(--muted); font-size: 13px; max-width: 370px; margin: 0 auto 22px; line-height: 1.7; }
+.stock-starters { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; justify-content: center; margin-top: 20px; }
+.stock-starters > span { font-size: 11px; color: var(--muted); margin-right: 3px; }
+.stock-starters .chip { font-size: 10px; }
+.stock-form-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.stock-form-heading h3 { margin-top: 7px; }
+.stock-close { width: 36px; height: 36px; background: var(--paper-2); border-radius: 50%; display: grid; place-items: center; font-size: 24px; flex-shrink: 0; color: var(--muted); }
+.stock-check { display: flex; align-items: center; gap: 9px; font-size: 13px; padding: 12px 0 2px; }
+.stock-check input { accent-color: var(--primary); width: 17px; height: 17px; }
+.stock-delete { display: block; color: var(--over); font-size: 12px; margin: 22px auto 0; padding: 8px; }
+.stock-error { padding: 11px 13px; border: 1px solid var(--over); border-radius: 8px; color: var(--over); font-size: 12px; }
+@media (min-width: 1300px) { .stock-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 650px) {
+  .stock-summary { gap: 8px; margin-bottom: 22px; }
+  .stock-stat { padding: 13px 10px; border-radius: 11px; }
+  .stock-stat > span { font-size: 8px; letter-spacing: .05em; }
+  .stock-stat strong { font-size: 24px; }
+  .stock-stat small { display: block; font-size: 10px; margin-top: 4px; }
+  .stock-toolbar { flex-wrap: wrap; }
+  .stock-toolbar > .btn { min-height: 39px; padding: 0 14px; font-size: 12px; }
+  .stock-segment button { font-size: 11px; padding: 8px 9px; gap: 5px; }
+  .stock-segment button svg { display: none; }
+  .stock-filters { grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; }
+  .stock-search { gap: 5px; padding: 0 9px; }
+  .stock-search input { font-size: 11px; }
+  .stock-filters select { width: 120px; font-size: 11px; }
+  .stock-grid { grid-template-columns: 1fr; gap: 12px; }
+  .stock-card { padding: 18px; }
+  .stock-low-banner { padding: 13px; gap: 10px; flex-wrap: wrap; }
+  .stock-low-banner .btn { min-height: 32px; padding: 0 10px; font-size: 11px; }
+  .stock-empty { padding: 30px 7px; }
+  .stock-empty h3 { font-size: 21px; }
+  .stock-stepper button { width: 40px; height: 38px; }
+  .stock-list-button { font-size: 12px; }
+}

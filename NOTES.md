@@ -1,5 +1,7 @@
 # HouseOS — build notes
 
+These are the original v1 design notes. See [PRODUCT_NOTES.md](PRODUCT_NOTES.md) for the current household workspace, scheduling model, and product boundaries.
+
 ## What this is
 A private household-operations app for one person living alone in India.
 Not a product. One user. No accounts, no login, no server for the core app.

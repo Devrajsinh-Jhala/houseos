@@ -1,93 +1,43 @@
-import { Fragment } from "react";
-import { Row } from "../components/Row";
-import {
-  anchorMinutes,
-  doneToday,
-  houseDay,
-  needsAttention,
-  nowMinutes,
-  routineFor,
-  type Item,
-} from "../core";
+import { useState } from "react";
+import { Icon } from "../components/Icon";
+import { anchorMinutes, daysUntilDue, fmtClock, houseDay, needsSetup, toISODate, type Item } from "../core";
+import { planForDay, resolveTime, type HouseholdSettings } from "../planner";
+import { expiringStock, lowStock, shoppingItems, type StockItem } from "../inventory";
+import { type MealPlan } from "../meals";
+import type { Tab } from "../App";
 
-interface Props {
-  items: Item[];
-  now: Date;
-  onToggle: (item: Item) => void;
-  onGoTo: (tab: "shopping" | "chores") => void;
-}
-
-export function Today({ items, now, onToggle, onGoTo }: Props) {
-  const day = houseDay(now);
-  const routine = routineFor(items, day);
-  const mins = nowMinutes(now);
-  const pending = items.filter((i) => needsAttention(i, now));
-  const shopCount = pending.filter((i) => i.kind === "restock").length;
-  const choreCount = pending.filter((i) => i.kind === "chore").length;
-
-  // The rule sits just above the first item still ahead of us. Once the last
-  // anchor has passed it belongs at the foot of the list, not nowhere.
-  const aheadAt = routine.findIndex((i) => anchorMinutes(i.timeAnchor) > mins);
-  const ruleAt = aheadAt === -1 ? routine.length : aheadAt;
-
-  const nowRule = (
-    <div className="now-rule">
-      <span>{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+interface Props {items:Item[];stock:StockItem[];meals:MealPlan[];settings:HouseholdSettings;now:Date;onToggle:(item:Item)=>void;onEdit:(item:Item)=>void;onGoTo:(tab:Tab)=>void;onAdd:()=>void}
+function HomeDrawing(){return <svg className="home-drawing" viewBox="0 0 290 190" fill="none" aria-hidden="true"><circle cx="162" cy="89" r="82" fill="#c5d7bb" opacity=".5"/><path d="M17 171h256" stroke="#92aa83" strokeWidth="1.5"/><rect x="100" y="79" width="113" height="92" rx="3" fill="#f8f5e9"/><path d="m85 83 70-58 74 58" fill="#72916d"/><path d="m85 83 70-58 74 58" stroke="#52734f" strokeWidth="3" strokeLinejoin="round"/><path d="M107 77v-35h16v21" fill="#f8f5e9"/><rect x="144" y="121" width="26" height="50" rx="2" fill="#b78557"/><circle cx="165" cy="148" r="1.8" fill="#f7e9cb"/><rect x="111" y="97" width="23" height="25" rx="2" fill="#d2dfd1" stroke="#7a9576"/><path d="M123 98v23m-11-12h21" stroke="#7a9576"/><rect x="181" y="97" width="23" height="25" rx="2" fill="#d2dfd1" stroke="#7a9576"/><path d="M192 98v23m-11-12h21" stroke="#7a9576"/><path d="M62 171v-50m-1 31c-30-4-37-28-30-32 21-7 32 9 31 32Zm0-16c-9-25 1-42 14-44 13 20 5 37-14 44Zm1 19c23-1 32-13 28-23-23-4-33 12-28 23Z" fill="#6d8d65"/><path d="M45 171h32l-4-21H49Z" fill="#bd9471"/><path d="M231 171v-30m0 4c-21-3-26-20-20-23 15-4 23 8 20 23Zm1-8c-2-20 8-29 16-27 3 17-3 26-16 27Z" fill="#8ba27b"/><path d="M221 171h22l-3-17h-16Z" fill="#ddc8a4"/><path d="m149 171-8 16h43l-13-16" fill="#e9dfca"/><path d="m225 38 5-7 5 7m-5-7v18" stroke="#9cb08d" strokeWidth="1.5"/><circle cx="72" cy="62" r="4" fill="#ebd999"/></svg>;}
+export function Today({items,stock,meals,settings,now,onToggle,onEdit,onGoTo,onAdd}:Props){
+  const today=houseDay(now);const [selected,setSelected]=useState<string|null>(null);const day=selected??today;
+  const weekStart=new Date(today+"T12:00:00");weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
+  const week=Array.from({length:7},(_,index)=>{const d=new Date(weekStart);d.setDate(d.getDate()+index);return toISODate(d);});
+  const plan=planForDay(items,day,settings,now);const done=plan.filter(t=>t.done).length;const pending=plan.filter(t=>!t.done);
+  const choreMinutes=pending.filter(t=>t.item.kind==="chore").reduce((sum,t)=>sum+t.duration,0);
+  const low=stock.filter(lowStock);const expiry=stock.filter(i=>expiringStock(i,toISODate(now)));const shop=shoppingItems(stock);
+  const bills=items.filter(i=>i.active&&i.kind==="fixed"&&daysUntilDue(i,now)<=7).sort((a,b)=>daysUntilDue(a,now)-daysUntilDue(b,now));
+  const setup=items.filter(needsSetup).length;
+  const dinner=meals.find(m=>m.date===day&&m.slot==="dinner");
+  const hour=now.getHours();const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Welcome home";
+  const arrival=resolveTime({scheduleAnchor:"arrival",arrivalOffset:0} as Item,settings,day);
+  const groups=[{name:"Morning",range:"A fresh start",tasks:plan.filter(t=>anchorMinutes(t.time)<720)},{name:"Afternoon",range:"Keep things moving",tasks:plan.filter(t=>anchorMinutes(t.time)>=720&&anchorMinutes(t.time)<1080)},{name:"Evening",range:"Settle in & reset",tasks:plan.filter(t=>anchorMinutes(t.time)>=1080)}].filter(g=>g.tasks.length);
+  return <>
+    <section className="welcome-card"><div className="welcome-content"><span className="welcome-tag"><span/>A LITTLE EVERY DAY</span><h2>{greeting}.<br/>You've got this.</h2><p>{pending.length?`${pending.length} things on your plan${choreMinutes?` · ${choreMinutes} min of chores`:""}. Take it one small task at a time.`:"A little breathing room. Your home is in good hands."}</p><button className="text-link" onClick={()=>onGoTo("planner")}>Make the week yours <Icon name="arrow" size={17}/></button></div><HomeDrawing/></section>
+    <div className="metric-grid">
+      <button className="metric-card" onClick={()=>onGoTo("planner")}><span className="metric-icon sage"><Icon name="today"/></span><span className="metric-body"><span>{day===today?"Today's progress":"Selected day's progress"}</span><strong>{done}<small> / {plan.length}</small></strong><span className="mini-progress"><i style={{width:`${plan.length?done/plan.length*100:0}%`}}/></span></span></button>
+      <button className="metric-card" onClick={()=>onGoTo("chores")}><span className="metric-icon peach"><Icon name="chores"/></span><span className="metric-body"><span>Chores to do</span><strong>{pending.filter(t=>t.item.kind==="chore").length}<small> tasks</small></strong><em>{choreMinutes?`About ${choreMinutes} minutes`:"A little room to breathe"}</em></span></button>
+      <button className="metric-card" onClick={()=>onGoTo("shopping")}><span className="metric-icon butter"><Icon name="shopping"/></span><span className="metric-body"><span>On the shopping list</span><strong>{shop.length}<small> items</small></strong><em>{low.length?`${low.length} running low`:"Ready for your next trip"}</em></span></button>
+      <button className="metric-card" onClick={()=>onGoTo("dates")}><span className="metric-icon lilac"><Icon name="dates"/></span><span className="metric-body"><span>Bills coming up</span><strong>{bills.length}<small> this week</small></strong><em>{bills[0]?.name??"No bills in the next 7 days"}</em></span></button>
     </div>
-  );
-
-  if (!routine.length) {
-    return (
-      <p className="empty">
-        No routine set for today yet. Add a few items on Manage — start with the
-        ones you actually forget.
-      </p>
-    );
-  }
-
-  return (
-    <>
-      {(shopCount > 0 || choreCount > 0) && (
-        <div className="btn-row">
-          {shopCount > 0 && (
-            <button className="btn ghost" onClick={() => onGoTo("shopping")}>
-              {shopCount} to buy
-            </button>
-          )}
-          {choreCount > 0 && (
-            <button className="btn ghost" onClick={() => onGoTo("chores")}>
-              {choreCount} to clean
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="section">
-        <h2>{new Date(day + "T12:00:00").toLocaleDateString(undefined, {
-          weekday: "long",
-          day: "numeric",
-          month: "short",
-        })}</h2>
-        <span className="count">
-          {routine.filter((i) => doneToday(i, now)).length} of {routine.length}
-        </span>
-      </div>
-
-      <div className="timeline">
-        {routine.map((item, idx) => (
-          <Fragment key={item.id}>
-            {idx === ruleAt && nowRule}
-            <Row
-              item={item}
-              done={doneToday(item, now)}
-              onToggle={onToggle}
-              timeline
-              now={now}
-            />
-          </Fragment>
-        ))}
-        {ruleAt === routine.length && nowRule}
-      </div>
-    </>
-  );
+    <div className="dashboard-columns"><section className="card day-card"><div className="card-heading"><div><h2>Your daily rhythm</h2><p>A plan that fits around your life.</p></div><button className="text-link" onClick={()=>onGoTo("planner")}>Full schedule <Icon name="arrow" size={16}/></button></div><div className="week-strip">{week.map(d=><button key={d} className={d===day?"selected":""} aria-pressed={d===day} onClick={()=>setSelected(d)}><span>{new Date(d+"T12:00:00").toLocaleDateString(undefined,{weekday:"short"})}</span><strong>{Number(d.slice(-2))}</strong><i className={d===today?"today-dot":""}/></button>)}</div><div className="day-heading"><strong>{day===today?"Today":new Date(day+"T12:00:00").toLocaleDateString(undefined,{weekday:"long"})}<span> · {new Date(day+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"long"})}</span></strong><span>{done} of {plan.length} done</span></div>
+      {!plan.length&&<div className="empty"><Icon name="leaf" size={32}/><p>A fresh page for your day.</p><button className="btn ghost small" onClick={onAdd}>Add your first task</button></div>}
+      {groups.map(group=><div className="rhythm-group" key={group.name}><div className="rhythm-label"><span className="rhythm-symbol">{group.name==="Morning"?"☀":group.name==="Evening"?"☾":"◒"}</span><strong>{group.name}</strong><span>{group.range}</span></div>{group.tasks.map(task=><div className={`daily-task ${task.done?"is-done":""}`} key={task.item.id}><span className="task-time">{fmtClock(task.time)}</span><button className="task-check" aria-label={`${task.done?"Undo":"Complete"} ${task.item.name}`} aria-pressed={task.done} disabled={day!==today} onClick={()=>onToggle(task.item)}>{task.done&&<Icon name="check" size={14}/>}</button><button className="task-description" onClick={()=>onEdit(task.item)}><strong>{task.item.name}</strong><span>{task.item.group|| (task.item.kind==="routine"?"Daily routine":task.item.kind==="fixed"?"Bills & dates":"Home care")} · {task.duration} min{task.item.scheduleAnchor==="arrival"?" · After getting home":""}</span></button>{task.overdue&&!task.done?<span className="task-badge overdue">Overdue</span>:task.item.priority==="high"?<span className="task-badge">Priority</span>:null}</div>)}</div>)}
+      <button className="add-inline" onClick={onAdd}><Icon name="plus" size={16}/>Add a little structure</button>
+    </section><aside className="dashboard-rail">
+      <section className="card home-routine-card"><span className="eyebrow">BUILT AROUND YOUR DAY</span><div className="arrival-heading"><span className="metric-icon sage"><Icon name="home"/></span><div><h3>Home, sweet home.</h3><p>Arriving at {fmtClock(arrival)}</p></div></div><p>Your evening tasks can move with your arrival time. Home a little late? Adjust once, settle in.</p><button className="text-link" onClick={()=>onGoTo("manage")}>Set my daily rhythm <Icon name="arrow" size={16}/></button></section>
+      <section className="card attention-card"><div className="card-heading"><h2>A little attention</h2><span className="pill">{low.length+expiry.length+bills.length}</span></div>{expiry.slice(0,2).map(i=><button className="attention-item" key={`expiry-${i.id}`} onClick={()=>onGoTo("inventory")}><span className="attention-dot amber"/><span><strong>{i.name}</strong><small>Use soon · check expiry</small></span><Icon name="arrow" size={15}/></button>)}{low.slice(0,2).map(i=><button className="attention-item" key={`stock-${i.id}`} onClick={()=>onGoTo("inventory")}><span className="attention-dot amber"/><span><strong>{i.name} is running low</strong><small>{i.quantity} {i.unit} left</small></span><Icon name="arrow" size={15}/></button>)}{bills.slice(0,2).map(i=><button className="attention-item" key={i.id} onClick={()=>onGoTo("dates")}><span className="attention-dot"/><span><strong>{i.name}</strong><small>{daysUntilDue(i,now)<0?"Payment overdue":daysUntilDue(i,now)===0?"Due today":`Due in ${daysUntilDue(i,now)} days`}</small></span><Icon name="arrow" size={15}/></button>)}{!low.length&&!expiry.length&&!bills.length&&<p className="note">Nothing needs your attention right now.</p>}{!stock.length&&<button className="attention-item" onClick={()=>onGoTo("inventory")}><span className="attention-dot"/><span><strong>Get to know your shelves</strong><small>Add your first inventory item</small></span><Icon name="arrow" size={15}/></button>}</section>
+      <section className="meal-preview"><span className="eyebrow">ON THE MENU</span><span className="meal-illustration"><Icon name="meals" size={29}/></span><h3>{dinner?.name??"What's for dinner?"}</h3><p>{dinner?"One less decision at the end of the day.":"A small plan now. An easier evening later."}</p><button className="text-link" onClick={()=>onGoTo("meals")}>{dinner?"See meal plan":"Plan something good"}<Icon name="arrow" size={16}/></button></section>
+      {setup>0&&<button className="setup-nudge" onClick={()=>onGoTo("chores")}><Icon name="manage" size={18}/><span><strong>Make the starting list yours</strong><small>Set last-done dates for your existing chores and supplies.</small></span><Icon name="arrow" size={16}/></button>}
+    </aside></div>
+  </>;
 }
